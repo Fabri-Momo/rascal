@@ -4,12 +4,12 @@ Python implementation for Windows, macOS (Intel and Apple Silicon) and Linux.
 
 ## Contents
 
-- **Python source code** — main application (`Rascal.py`) and modules
-- **icons/** — application icons (`.ico`, `.png`, `.svg`)
-- **shaders/** — GLSL shader files
-- **packaging/** — build scripts (`Rascal.spec`, `build_msi.py`, `setup-mac.py`, `setup-linux.py`)
+- **Rascal.py** — main application (single-file Python desktop GUI)
 - **requirements.txt** — Python dependencies
-- **INSTALL.md** — installation instructions for all platforms
+- **rascal_clean.ico** — window icon
+- **rascal_splash.png** — welcome page image
+- **camera.svg**, **file-upload.svg**, **reset.svg** — toolbar icons
+- **INSTALL.md** — detailed installation instructions for all platforms
 
 ## Requirements
 
@@ -31,4 +31,4 @@ python Rascal.py
 
 ## Pre-built installers
 
-Pre-built installers for all platforms are available in the [Releases](../releases/) directory.
+Pre-built installers for all platforms are available in the [`download/`](../download/) directory.

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1254" height="1254" viewBox="0 0 1254 1254" role="img" aria-label="Flèche circulaire antihoraire sur fond noir à coins arrondis">
+  <!-- extérieur du carré transparent -->
+  <rect x="0" y="0" width="1254" height="1254" rx="120" ry="120" fill="#000000"/>
+  <g fill="none" stroke="#ffffff" stroke-width="84" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M310 612 C310 824 475 990 650 990 C855 990 1020 825 1020 620 C1020 415 855 255 650 255 C545 255 455 297 390 365"/>
+    <path d="M330 265 L330 465 L555 465"/>
+  </g>
+</svg>
