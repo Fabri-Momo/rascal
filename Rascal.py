@@ -418,6 +418,7 @@ uniform vec3 mu_lin;
 uniform mat3 Ruser;
 uniform float u_push;
 uniform float u_var_restore;
+uniform float u_contrast;
 
 uniform int u_mode;
 
@@ -467,6 +468,9 @@ void main() {
     if (u_split_active == 1 && abs(v_texcoord.x - u_split_pos) < u_split_line_w) {
         base_color = vec3(1.0, 1.0, 1.0);
     }
+
+    // Manual contrast adjustment (1.0 = no change)
+    base_color = clamp((base_color - 0.5) * u_contrast + 0.5, 0.0, 1.0);
 
     if (u_use_brush == 1) {
         float a = texture2D(u_brush, v_texcoord).r;
@@ -1365,6 +1369,7 @@ class TexturedModelWidget(QOpenGLWidget):
         uniform mat3 Ruser;
         uniform float u_push;
         uniform float u_var_restore;
+        uniform float u_contrast;
 
         uniform sampler2D u_brush;
         uniform int u_use_brush;
@@ -1389,6 +1394,9 @@ class TexturedModelWidget(QOpenGLWidget):
             mat3 eff_Winv = mat3(1.0) + u_var_restore * (Winv_lin - mat3(1.0));
             vec3 xo      = clamp(mu_lin + eff_Winv * z2, 0.0, 1.0);
             vec3 color   = lut_lookup_rgb(u_lut_l2s, u_lut_size, xo);
+
+            // Manual contrast adjustment (1.0 = no change)
+            color = clamp((color - 0.5) * u_contrast + 0.5, 0.0, 1.0);
 
             if (u_use_brush == 1) {{
                 float a = texture(u_brush, v_uv).r;
@@ -1543,6 +1551,7 @@ class TexturedModelWidget(QOpenGLWidget):
         GL.glUniformMatrix3fv(_loc('Ruser'),    1, GL.GL_FALSE, st.rot.Ruser)
         GL.glUniform1f(_loc('u_push'), float(st.push_factor))
         GL.glUniform1f(_loc('u_var_restore'), float(st.variance_restore))
+        GL.glUniform1f(_loc('u_contrast'), float(st.contrast))
         GL.glUniform1f(_loc('u_lut_size'), float(LUT_SIZE))
 
         # Brush overlay
@@ -1866,6 +1875,7 @@ class AppState:
         self.last_rot_quat = None  # quaternion used during the last re-process
         self.push_factor = 1.0  # norm multiplier in the transformed space
         self.variance_restore = 1.0  # 1.0 = full variance restore, 0.0 = identity (no restore)
+        self.contrast = 1.0  # 1.0 = no contrast change, <1.0 flattens, >1.0 increases contrast
         self.ica_active = False  # True if ICA has been applied and hasn't been overridden by manual rotation
         self.modify_params = None  # dict: {crop_rect, brightness, contrast} from last Modify Image
 
@@ -2078,6 +2088,7 @@ class VisImageWidget(QtWidgets.QWidget):
         self.prog['u_aspect_correction'] = [1.0, 1.0]
         self.prog['u_push'] = float(self.state.push_factor)
         self.prog['u_var_restore'] = float(self.state.variance_restore)
+        self.prog['u_contrast'] = float(self.state.contrast)
 
         # Initialise shader variables with default values
         self.prog['u_use_brush'] = 0
@@ -2131,6 +2142,7 @@ class VisImageWidget(QtWidgets.QWidget):
         self.prog['W_lin']     = self.state.W_lin
         self.prog['Winv_lin']  = self.state.Winv_lin
         self.prog['mu_lin']    = self.state.mu_lin
+        self.prog['u_contrast'] = float(self.state.contrast)
 
     def toggle_split(self, active=None):
         """Toggle or set the split view mode."""
@@ -2162,6 +2174,7 @@ class VisImageWidget(QtWidgets.QWidget):
         self.prog['Ruser'] = st.rot.Ruser
         self.prog['u_push'] = float(st.push_factor)
         self.prog['u_var_restore'] = float(st.variance_restore)
+        self.prog['u_contrast'] = float(st.contrast)
 
         # Split line: keep constant ~2 px width on screen regardless of zoom
         if self.split_active:
@@ -4026,9 +4039,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.auto_rotate_btn = None
         self._rand_rot_action = None
         self._rand_rot_timer = None
-        self.push_spin = None
+        self.push_slider = None
+        self.push_val_label = None
         self.var_restore_slider = None
         self.var_restore_val_label = None
+        self.contrast_label = None
+        self.contrast_slider = None
+        self.contrast_val_label = None
+        self.auto_contrast_btn = None
         self.reprocess_btn = None
         self.model_reprocess_btn = None
         self.clear_brush_btn = None
@@ -4101,15 +4119,16 @@ class MainWindow(QtWidgets.QMainWindow):
         level_row.addSpacing(16)
         self.push_label = QtWidgets.QLabel("Push:")
         level_row.addWidget(self.push_label)
-        self.push_spin = QtWidgets.QDoubleSpinBox()
-        self.push_spin.setLocale(QtCore.QLocale(QtCore.QLocale.C))
-        self.push_spin.setRange(0.1, 50.0)
-        self.push_spin.setSingleStep(0.05)
-        self.push_spin.setDecimals(2)
-        self.push_spin.setValue(1.0)
-        self.push_spin.setFixedWidth(70)
-        self.push_spin.valueChanged.connect(self._on_push_spin_changed)
-        level_row.addWidget(self.push_spin)
+        self.push_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.push_slider.setRange(10, 500)  # displayed as 0.10 .. 5.00
+        self.push_slider.setValue(100)
+        self.push_slider.setFixedWidth(100)
+        self.push_slider.setToolTip("Push factor: 1.00 = normal, 0.10 = minimum, 5.00 = maximum")
+        self.push_slider.valueChanged.connect(lambda v: self._set_push(v / 100.0))
+        level_row.addWidget(self.push_slider)
+        self.push_val_label = QtWidgets.QLabel("1.00")
+        self.push_val_label.setFixedWidth(40)
+        level_row.addWidget(self.push_val_label)
         level_row.addSpacing(12)
         self.var_restore_label = QtWidgets.QLabel("Var:")
         level_row.addWidget(self.var_restore_label)
@@ -4123,6 +4142,25 @@ class MainWindow(QtWidgets.QMainWindow):
         self.var_restore_val_label = QtWidgets.QLabel("1.00")
         self.var_restore_val_label.setFixedWidth(40)
         level_row.addWidget(self.var_restore_val_label)
+        level_row.addSpacing(12)
+        self.contrast_label = QtWidgets.QLabel("Contrast:")
+        level_row.addWidget(self.contrast_label)
+        self.contrast_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.contrast_slider.setRange(50, 300)
+        self.contrast_slider.setValue(100)
+        self.contrast_slider.setFixedWidth(100)
+        self.contrast_slider.setToolTip("Contrast: 1.0 = no change, 0.5 = flatter, 3.0 = more contrast")
+        self.contrast_slider.valueChanged.connect(lambda v: self._set_contrast(v / 100.0))
+        level_row.addWidget(self.contrast_slider)
+        self.contrast_val_label = QtWidgets.QLabel("1.00")
+        self.contrast_val_label.setFixedWidth(40)
+        level_row.addWidget(self.contrast_val_label)
+        level_row.addSpacing(6)
+        self.auto_contrast_btn = QtWidgets.QPushButton("Auto")
+        self.auto_contrast_btn.setCheckable(True)
+        self.auto_contrast_btn.setToolTip("Auto contrast: adjust contrast automatically for the current view. Turns off when rotation or parameters change.")
+        self.auto_contrast_btn.clicked.connect(self._on_auto_contrast_clicked)
+        level_row.addWidget(self.auto_contrast_btn)
         level_row.addStretch()
 
         split_main.addWidget(left_box); split_main.addWidget(split_center_right)
@@ -4282,6 +4320,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _on_rotation_started(self):
         self._stop_autorotate()
+        self._invalidate_auto_contrast()
         self._session_dirty = True
 
     def _stop_autorotate(self):
@@ -4788,6 +4827,7 @@ class MainWindow(QtWidgets.QMainWindow):
             'ang_z': st.rot.ang_z,
             'push_factor': st.push_factor,
             'variance_restore': st.variance_restore,
+            'contrast': st.contrast,
             'fib_norm_mode': st.fib_norm_mode,
             'fib_img_cached': st._fib_img_cached.copy() if st._fib_img_cached is not None else None,
             'fib_Zs_norm_cached': st._fib_Zs_norm_cached.copy() if st._fib_Zs_norm_cached is not None else None,
@@ -4851,6 +4891,7 @@ class MainWindow(QtWidgets.QMainWindow):
         st.rot.ang_z = preset['ang_z']
         self._set_push(preset['push_factor'], mark_dirty=False)
         self._set_var_restore(preset.get('variance_restore', 1.0), mark_dirty=False)
+        self._set_contrast(preset.get('contrast', 1.0), mark_dirty=False)
 
         # Restore full image + ZCA (cancels any ROI applied after the preset was saved)
         st.img_srgb_orig = preset['img_srgb_orig'].copy()
@@ -5244,6 +5285,7 @@ class MainWindow(QtWidgets.QMainWindow):
         prog.setValue(3); QtWidgets.QApplication.processEvents()
         self._set_push(1.0, mark_dirty=False)
         self._set_var_restore(1.0, mark_dirty=False)
+        self._set_contrast(1.0, mark_dirty=False)
         self.reset_rotation()
         if self.state.widget_3d:
             self.state.widget_3d.update_markers(); self.state.widget_3d.canvas.update()
@@ -5781,6 +5823,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 st.ica_active = False
                 if callable(st.on_ica_deactivated):
                     st.on_ica_deactivated()
+            self._invalidate_auto_contrast()
             st.refresh_all()
             self._session_dirty = True
 
@@ -5862,18 +5905,18 @@ class MainWindow(QtWidgets.QMainWindow):
         return super().eventFilter(obj, event)
 
     def _set_push(self, value, mark_dirty=True):
-        value = round(max(0.1, min(50.0, value)), 2)
+        value = round(max(0.1, min(5.0, value)), 2)
         self.state.push_factor = value
-        if self.push_spin is not None:
-            self.push_spin.blockSignals(True)
-            self.push_spin.setValue(value)
-            self.push_spin.blockSignals(False)
+        if self.push_slider is not None:
+            self.push_slider.blockSignals(True)
+            self.push_slider.setValue(int(value * 100))
+            self.push_slider.blockSignals(False)
+        if self.push_val_label is not None:
+            self.push_val_label.setText(f"{value:.2f}")
+        self._invalidate_auto_contrast()
         self.state.refresh_all()
         if mark_dirty:
             self._session_dirty = True
-
-    def _on_push_spin_changed(self, value):
-        self._set_push(value)
 
     def _set_var_restore(self, value, mark_dirty=True):
         value = round(max(0.0, min(1.0, value)), 2)
@@ -5884,9 +5927,66 @@ class MainWindow(QtWidgets.QMainWindow):
             self.var_restore_slider.blockSignals(False)
         if self.var_restore_val_label is not None:
             self.var_restore_val_label.setText(f"{value:.2f}")
+        self._invalidate_auto_contrast()
         self.state.refresh_all()
         if mark_dirty:
             self._session_dirty = True
+
+    def _set_contrast(self, value, mark_dirty=True, invalidate_auto=True):
+        value = round(max(0.5, min(3.0, value)), 2)
+        self.state.contrast = value
+        if self.contrast_slider is not None:
+            self.contrast_slider.blockSignals(True)
+            self.contrast_slider.setValue(int(value * 100))
+            self.contrast_slider.blockSignals(False)
+        if self.contrast_val_label is not None:
+            self.contrast_val_label.setText(f"{value:.2f}")
+        if invalidate_auto:
+            self._invalidate_auto_contrast()
+        self.state.refresh_all()
+        if mark_dirty:
+            self._session_dirty = True
+
+    def _invalidate_auto_contrast(self):
+        if self.auto_contrast_btn is not None and self.auto_contrast_btn.isChecked():
+            self.auto_contrast_btn.setChecked(False)
+
+    def _compute_auto_contrast(self):
+        """Compute an automatic contrast factor for the current transformed view.
+        Returns a value in [0.5, 2.0]."""
+        try:
+            rgb_u8 = self._render_fullres_image(0)
+            H, W = rgb_u8.shape[:2]
+            # Downsample large images for speed
+            if max(H, W) > 1024:
+                from PIL import Image
+                scale = 1024 / max(H, W)
+                new_w = int(W * scale)
+                new_h = int(H * scale)
+                pil = Image.fromarray(rgb_u8)
+                pil = pil.resize((new_w, new_h), Image.LANCZOS)
+                rgb_u8 = np.array(pil)
+            # Rec. 601 luminance
+            lum = 0.299 * rgb_u8[..., 0].astype(np.float32) + \
+                  0.587 * rgb_u8[..., 1].astype(np.float32) + \
+                  0.114 * rgb_u8[..., 2].astype(np.float32)
+            p2 = np.percentile(lum, 2.0)
+            p98 = np.percentile(lum, 98.0)
+            if p98 > p2 + 1e-3:
+                factor = 255.0 / (p98 - p2)
+            else:
+                factor = 1.0
+            return round(max(0.5, min(3.0, factor)), 2)
+        except Exception as e:
+            print(f"[RASCAL] Auto contrast computation failed: {e}")
+            return 1.0
+
+    def _on_auto_contrast_clicked(self, checked):
+        if checked:
+            factor = self._compute_auto_contrast()
+            self._set_contrast(factor, mark_dirty=True, invalidate_auto=False)
+        else:
+            self._set_contrast(1.0, mark_dirty=True, invalidate_auto=False)
 
     def _on_pol_btn_clicked(self):
         st = self.state
@@ -5897,6 +5997,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if st.widget_3d is not None:
             st.widget_3d.update_markers()
             st.widget_3d.canvas.update()
+        self._invalidate_auto_contrast()
         st.refresh_all()
         self.info_panel.refresh()
         self._session_dirty = True
@@ -5974,6 +6075,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     self.ica_btn.blockSignals(True)
                     self.ica_btn.setChecked(False)
                     self.ica_btn.blockSignals(False)
+                self._invalidate_auto_contrast()
                 st.refresh_all()
                 self._session_dirty = True
                 self.statusBar().showMessage("Radial Push applied (cached).", 4000)
@@ -6030,6 +6132,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if st.widget_3d:
             st.widget_3d.update_markers()
             st.widget_3d.canvas.update()
+        self._invalidate_auto_contrast()
         st.refresh_all()
         self._session_dirty = True
         self.statusBar().showMessage("Radial Push disabled.", 3000)
@@ -6152,6 +6255,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.ica_btn.blockSignals(True)
             self.ica_btn.setChecked(False)
             self.ica_btn.blockSignals(False)
+        self._invalidate_auto_contrast()
         st.refresh_all()
         self._session_dirty = True
         self.statusBar().showMessage("Radial Push applied.", 4000)
@@ -6394,10 +6498,16 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.w_color.toggle_split(False)
                 self._split_btn.setChecked(False)
         self.push_label.setVisible(is_expert)
-        self.push_spin.setVisible(is_expert)
+        self.push_slider.setVisible(is_expert)
+        self.push_val_label.setVisible(is_expert)
         self.var_restore_label.setVisible(is_expert)
         self.var_restore_slider.setVisible(is_expert)
         self.var_restore_val_label.setVisible(is_expert)
+        self.contrast_label.setVisible(is_expert)
+        self.contrast_slider.setVisible(is_expert)
+        self.contrast_val_label.setVisible(is_expert)
+        if self.auto_contrast_btn is not None:
+            self.auto_contrast_btn.setVisible(is_expert)
 
         # 3D expert left panel: rotation/quaternion (same place as 2D)
         if self._model_left_box is not None:
@@ -6464,10 +6574,16 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Push: visible only in expert mode
         self.push_label.setVisible(is_expert)
-        self.push_spin.setVisible(is_expert)
+        self.push_slider.setVisible(is_expert)
+        self.push_val_label.setVisible(is_expert)
         self.var_restore_label.setVisible(is_expert)
         self.var_restore_slider.setVisible(is_expert)
         self.var_restore_val_label.setVisible(is_expert)
+        self.contrast_label.setVisible(is_expert)
+        self.contrast_slider.setVisible(is_expert)
+        self.contrast_val_label.setVisible(is_expert)
+        if self.auto_contrast_btn is not None:
+            self.auto_contrast_btn.setVisible(is_expert)
 
         # 3D cube: visible only in expert mode
         self.box_3d.setVisible(is_expert)
@@ -6664,6 +6780,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.state.disp_ax = self.state.disp_ay = self.state.disp_az = 0.0
         self._set_push(1.0, mark_dirty=False)
         self._set_var_restore(1.0, mark_dirty=False)
+        self._set_contrast(1.0, mark_dirty=False)
         for w in self.state.widgets_2d:
             if hasattr(w, "zoom_level"): w.zoom_level = 1.0
             if hasattr(w, "zoom_center"): w.zoom_center = np.array([0.0, 0.0], dtype=np.float32)
@@ -6759,6 +6876,7 @@ class MainWindow(QtWidgets.QMainWindow):
         st.disp_ax = st.disp_ay = st.disp_az = 0.0
         self._set_push(1.0, mark_dirty=False)
         self._set_var_restore(1.0, mark_dirty=False)
+        self._set_contrast(1.0, mark_dirty=False)
         for w in st.widgets_2d:
             if hasattr(w, "zoom_level"): w.zoom_level = 1.0
             if hasattr(w, "zoom_center"): w.zoom_center = np.array([0.0, 0.0], dtype=np.float32)
@@ -6894,6 +7012,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.ica_btn.blockSignals(True)
             self.ica_btn.setChecked(True)
             self.ica_btn.blockSignals(False)
+        self._invalidate_auto_contrast()
         st.refresh_all()
         self._session_dirty = True
         self.statusBar().showMessage(f"ICA rotation applied. {message}", 3000)
@@ -6987,6 +7106,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.ica_btn.blockSignals(True)
             self.ica_btn.setChecked(False)
             self.ica_btn.blockSignals(False)
+        self._invalidate_auto_contrast()
         st.refresh_all()
         self._session_dirty = True
 
@@ -7018,7 +7138,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 st.ica_active = False
                 if callable(st.on_ica_deactivated):
                     st.on_ica_deactivated()
-            
+            self._invalidate_auto_contrast()
             st.refresh_all()
             self._session_dirty = True
 
@@ -7216,6 +7336,7 @@ class MainWindow(QtWidgets.QMainWindow):
             'paint_mode': st.paint_mode,
             'push_factor': float(st.push_factor),
             'variance_restore': float(st.variance_restore),
+            'contrast': float(st.contrast),
             'ui_level': self.ui_level,
             'fib_norm_mode': bool(st.fib_norm_mode),
             'fib_img': fib_img_b64,
@@ -7546,10 +7667,11 @@ class MainWindow(QtWidgets.QMainWindow):
                 if self._save_3d_action is not None:
                     self._save_3d_action.setVisible(False)
 
-            # 2b. Restore push_factor, variance_restore and ui_level
+            # 2b. Restore push_factor, variance_restore, contrast and ui_level
             push = data.get('push_factor', 1.0)
             self._set_push(push, mark_dirty=False)
             self._set_var_restore(data.get('variance_restore', 1.0), mark_dirty=False)
+            self._set_contrast(data.get('contrast', 1.0), mark_dirty=False)
             ui_lvl = data.get('ui_level', 'basic')
             self._apply_ui_level(ui_lvl)
             idx_lvl = ['basic', 'expert'].index(ui_lvl) if ui_lvl in ['basic', 'expert'] else 0
@@ -8139,7 +8261,7 @@ class MainWindow(QtWidgets.QMainWindow):
         dlg.setTextFormat(QtCore.Qt.RichText)
         dlg.setText(
             "Rascal — Colour visualisation tool<br><br>"
-            "Version 1.6.8<br>"
+            "Version 1.6.9<br>"
             "Contact: Fabrice.Monna@ube.fr<br><br>"
             "© 2026 - Fabrice Monna - All rights reserved"
         )

@@ -1,12 +1,11 @@
-# build_windows_msi.py — Builds Rascal.exe with PyInstaller then packages it as an MSI with WiX v3.
+# build_msi.py — Builds Rascal.exe with PyInstaller then packages it as an MSI with WiX v3.
 #
 # Prerequisites (run once):
 #   pip install pyinstaller
 #   Install WiX v3: https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314.exe
 #
 # Usage:
-#   python build_windows_msi.py
-#   python build_windows_msi.py --skip-pyinstaller   (if setup_windows.py was already run)
+#   python build_msi.py
 
 import os
 import sys
@@ -17,7 +16,7 @@ import xml.etree.ElementTree as ET
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 APP_NAME        = "Rascal"
-APP_VERSION     = "1.6.8"
+APP_VERSION     = "1.6.9"
 APP_MANUFACTURER = "Fabrice Monna"
 UPGRADE_CODE    = "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"  # keep stable across versions
 ENTRY_SCRIPT    = "Rascal.py"
