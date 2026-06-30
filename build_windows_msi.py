@@ -16,7 +16,7 @@ import xml.etree.ElementTree as ET
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 APP_NAME        = "Rascal"
-APP_VERSION     = "1.6.9"
+APP_VERSION     = "1.7.1"
 APP_MANUFACTURER = "Fabrice Monna"
 UPGRADE_CODE    = "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"  # keep stable across versions
 ENTRY_SCRIPT    = "Rascal.py"
@@ -273,14 +273,127 @@ def _make_wix_bitmaps(ico_path: pathlib.Path, dialog_bmp: pathlib.Path, banner_b
 
 
 # ── License RTF helper ───────────────────────────────────────────────────────
+def _txt_to_rtf_body(text: str) -> str:
+    """Escape plain text for RTF embedding."""
+    out = []
+    for ch in text:
+        if ch == '\\':
+            out.append('\\\\')
+        elif ch == '{':
+            out.append('\\{')
+        elif ch == '}':
+            out.append('\\}')
+        elif ch == '\n':
+            out.append('\\line\n')
+        elif ord(ch) > 127:
+            out.append(f'\\u{ord(ch)}?')
+        else:
+            out.append(ch)
+    return ''.join(out)
+
+
 def _ensure_license_rtf(here: pathlib.Path):
-    rtf = here / "License.rtf"
-    if not rtf.exists():
-        rtf.write_text(
-            r"{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\f0\fs20 "
-            r"Rascal Software. All rights reserved.}",
-            encoding="ascii"
-        )
+    rtf_path = here / "License.rtf"
+
+    MAIN_LICENSE = f"""{APP_NAME} — GNU General Public License v3
+{'=' * 60}
+
+Copyright (C) 2007 Free Software Foundation, Inc.
+https://fsf.org/
+
+This repository is distributed under the terms of the GNU General
+Public License version 3 (GPL-3.0).
+
+For the complete legal text of the GPL-3.0, please refer to:
+https://www.gnu.org/licenses/gpl-3.0.txt
+
+In summary:
+  - You may use, copy, modify and distribute this software.
+  - Any derivative work must also be distributed under GPL-3.0.
+  - Source code must be made available when distributing binaries.
+  - There is NO WARRANTY, to the extent permitted by law.
+"""
+
+    THIRD_PARTY = """\
+
+Third-Party Licenses
+====================
+
+This software bundles or depends on the following open-source packages:
+
+------------------------------------------------------------
+NumPy — BSD 3-Clause License
+Copyright (c) 2005-2024, NumPy Developers.
+https://numpy.org/
+------------------------------------------------------------
+
+------------------------------------------------------------
+PyQt5 — GPL v3 / Commercial
+Copyright (C) Riverbank Computing Limited.
+https://riverbankcomputing.com/software/pyqt/
+------------------------------------------------------------
+
+------------------------------------------------------------
+PyOpenGL — BSD License
+Copyright (c) PyOpenGL contributors.
+http://pyopengl.sourceforge.net/
+------------------------------------------------------------
+
+------------------------------------------------------------
+VisPy — BSD 2-Clause License
+Copyright (c) 2013-2024, VisPy developers.
+https://vispy.org/
+------------------------------------------------------------
+
+------------------------------------------------------------
+imageio — BSD 2-Clause License
+Copyright (c) 2014-2024, imageio contributors.
+https://imageio.github.io/
+------------------------------------------------------------
+
+------------------------------------------------------------
+rawpy — MIT License
+Copyright (c) 2014 Uli Koehler.
+https://github.com/letmaik/rawpy
+------------------------------------------------------------
+
+------------------------------------------------------------
+Pillow (PIL Fork) — HPND License
+Copyright (c) 1997-2011 by Secret Labs AB.
+Copyright (c) 1995-2011 by Fredrik Lundh.
+Copyright (c) 2010-2024 by Jeffrey A. Clark and contributors.
+https://python-pillow.org/
+------------------------------------------------------------
+
+------------------------------------------------------------
+psutil — BSD 3-Clause License
+Copyright (c) 2009, Jay Loden, Dave Daeschler, Giampaolo Rodola.
+https://github.com/giampaolo/psutil
+------------------------------------------------------------
+
+------------------------------------------------------------
+SciPy — BSD 3-Clause License
+Copyright (c) 2001-2024, SciPy Developers.
+https://scipy.org/
+------------------------------------------------------------
+"""
+
+    full_text = MAIN_LICENSE + THIRD_PARTY
+
+    header = (
+        r"{\rtf1\ansi\ansicpg1252\deff0"
+        r"{\fonttbl{\f0\fswiss\fcharset0 Arial;}}"
+        r"{\colortbl;\red0\green0\blue0;}"
+        r"\f0\fs18\cf1 "
+    )
+    body = _txt_to_rtf_body(full_text)
+    rtf_content = header + body + r"}"
+
+    if rtf_path.exists():
+        print(f"License.rtf already present — skipping regeneration ({rtf_path})")
+        return
+    rtf_path.write_text(rtf_content, encoding="ascii", errors="replace")
+    print(f"License.rtf written → {rtf_path}")
 
 
 # ── Step 3 : WiX build (v3: candle + light) ──────────────────────────────────

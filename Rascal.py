@@ -419,6 +419,7 @@ uniform mat3 Ruser;
 uniform float u_push;
 uniform float u_var_restore;
 uniform float u_contrast;
+uniform float u_contrast_center;
 
 uniform int u_mode;
 
@@ -469,8 +470,12 @@ void main() {
         base_color = vec3(1.0, 1.0, 1.0);
     }
 
-    // Manual contrast adjustment (1.0 = no change)
-    base_color = clamp((base_color - 0.5) * u_contrast + 0.5, 0.0, 1.0);
+    // Manual contrast adjustment (1.0 = no change), only on transformed views.
+    // The left side of the split view (original) must stay unmodified.
+    bool is_original = (u_mode == 4) || (u_split_active == 1 && v_texcoord.x < u_split_pos);
+    if (!is_original) {
+        base_color = clamp((base_color - u_contrast_center) * u_contrast + u_contrast_center, 0.0, 1.0);
+    }
 
     if (u_use_brush == 1) {
         float a = texture2D(u_brush, v_texcoord).r;
@@ -1370,6 +1375,7 @@ class TexturedModelWidget(QOpenGLWidget):
         uniform float u_push;
         uniform float u_var_restore;
         uniform float u_contrast;
+        uniform float u_contrast_center;
 
         uniform sampler2D u_brush;
         uniform int u_use_brush;
@@ -1396,7 +1402,7 @@ class TexturedModelWidget(QOpenGLWidget):
             vec3 color   = lut_lookup_rgb(u_lut_l2s, u_lut_size, xo);
 
             // Manual contrast adjustment (1.0 = no change)
-            color = clamp((color - 0.5) * u_contrast + 0.5, 0.0, 1.0);
+            color = clamp((color - u_contrast_center) * u_contrast + u_contrast_center, 0.0, 1.0);
 
             if (u_use_brush == 1) {{
                 float a = texture(u_brush, v_uv).r;
@@ -1552,6 +1558,7 @@ class TexturedModelWidget(QOpenGLWidget):
         GL.glUniform1f(_loc('u_push'), float(st.push_factor))
         GL.glUniform1f(_loc('u_var_restore'), float(st.variance_restore))
         GL.glUniform1f(_loc('u_contrast'), float(st.contrast))
+        GL.glUniform1f(_loc('u_contrast_center'), float(st.contrast_center))
         GL.glUniform1f(_loc('u_lut_size'), float(LUT_SIZE))
 
         # Brush overlay
@@ -1876,6 +1883,7 @@ class AppState:
         self.push_factor = 1.0  # norm multiplier in the transformed space
         self.variance_restore = 1.0  # 1.0 = full variance restore, 0.0 = identity (no restore)
         self.contrast = 1.0  # 1.0 = no contrast change, <1.0 flattens, >1.0 increases contrast
+        self.contrast_center = 0.5  # pivot for contrast adjustment (0.5 = mid-gray)
         self.ica_active = False  # True if ICA has been applied and hasn't been overridden by manual rotation
         self.modify_params = None  # dict: {crop_rect, brightness, contrast} from last Modify Image
 
@@ -2089,6 +2097,7 @@ class VisImageWidget(QtWidgets.QWidget):
         self.prog['u_push'] = float(self.state.push_factor)
         self.prog['u_var_restore'] = float(self.state.variance_restore)
         self.prog['u_contrast'] = float(self.state.contrast)
+        self.prog['u_contrast_center'] = float(self.state.contrast_center)
 
         # Initialise shader variables with default values
         self.prog['u_use_brush'] = 0
@@ -2127,22 +2136,44 @@ class VisImageWidget(QtWidgets.QWidget):
         self._last_paint_ij = None
 
     def update_image_texture(self):
-        # Update image textures
-        self.tex_img_orig.set_data(self.state.img_srgb_orig)
-        self.tex_img_file_orig.set_data(self.state.img_original_view)
-        
+        # Ensure data is contiguous for safe GPU upload
+        img_orig = np.ascontiguousarray(self.state.img_srgb_orig, dtype=np.float32)
+        img_file = np.ascontiguousarray(self.state.img_original_view, dtype=np.float32)
+
+        # Update image textures. Recreate the texture object if the image
+        # size changed to avoid glTexSubImage2D corruption that can show the
+        # image as a tiled/puzzle pattern (observed after Modify Image -> Reset).
+        if self.tex_img_orig.shape[:2] != img_orig.shape[:2]:
+            self.tex_img_orig = gloo.Texture2D(
+                img_orig, interpolation='linear', wrapping='clamp_to_edge'
+            )
+            self.prog['u_tex_orig'] = self.tex_img_orig
+        else:
+            self.tex_img_orig.set_data(img_orig)
+
+        if self.tex_img_file_orig.shape[:2] != img_file.shape[:2]:
+            self.tex_img_file_orig = gloo.Texture2D(
+                img_file, interpolation='linear', wrapping='clamp_to_edge'
+            )
+            self.prog['u_tex_file_orig'] = self.tex_img_file_orig
+        else:
+            self.tex_img_file_orig.set_data(img_file)
+
         # Disable brush overlay
         self.prog['u_use_brush'] = 0
 
         # Update brush buffer if image changed
         self.brush_alpha = self.state.brush_alpha
-        self.brush_tex.set_data(self.brush_alpha.astype(np.float32))
-        
+        self.brush_tex.set_data(np.ascontiguousarray(
+            self.state.brush_alpha.astype(np.float32)
+        ))
+
         # Frozen ZCA
         self.prog['W_lin']     = self.state.W_lin
         self.prog['Winv_lin']  = self.state.Winv_lin
         self.prog['mu_lin']    = self.state.mu_lin
         self.prog['u_contrast'] = float(self.state.contrast)
+        self.prog['u_contrast_center'] = float(self.state.contrast_center)
 
     def toggle_split(self, active=None):
         """Toggle or set the split view mode."""
@@ -2175,6 +2206,7 @@ class VisImageWidget(QtWidgets.QWidget):
         self.prog['u_push'] = float(st.push_factor)
         self.prog['u_var_restore'] = float(st.variance_restore)
         self.prog['u_contrast'] = float(st.contrast)
+        self.prog['u_contrast_center'] = float(st.contrast_center)
 
         # Split line: keep constant ~2 px width on screen regardless of zoom
         if self.split_active:
@@ -5935,6 +5967,9 @@ class MainWindow(QtWidgets.QMainWindow):
     def _set_contrast(self, value, mark_dirty=True, invalidate_auto=True):
         value = round(max(0.5, min(3.0, value)), 2)
         self.state.contrast = value
+        # When returning to manual contrast, reset the pivot to mid-gray
+        if self.auto_contrast_btn is not None and not self.auto_contrast_btn.isChecked():
+            self.state.contrast_center = 0.5
         if self.contrast_slider is not None:
             self.contrast_slider.blockSignals(True)
             self.contrast_slider.setValue(int(value * 100))
@@ -5952,8 +5987,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.auto_contrast_btn.setChecked(False)
 
     def _compute_auto_contrast(self):
-        """Compute an automatic contrast factor for the current transformed view.
-        Returns a value in [0.5, 2.0]."""
+        """Compute an automatic contrast factor and pivot for the current transformed view.
+        Returns a value in [0.5, 3.0] and sets state.contrast_center to the median luminance."""
         try:
             rgb_u8 = self._render_fullres_image(0)
             H, W = rgb_u8.shape[:2]
@@ -5967,18 +6002,27 @@ class MainWindow(QtWidgets.QMainWindow):
                 pil = pil.resize((new_w, new_h), Image.LANCZOS)
                 rgb_u8 = np.array(pil)
             # Rec. 601 luminance
-            lum = 0.299 * rgb_u8[..., 0].astype(np.float32) + \
-                  0.587 * rgb_u8[..., 1].astype(np.float32) + \
-                  0.114 * rgb_u8[..., 2].astype(np.float32)
-            p2 = np.percentile(lum, 2.0)
-            p98 = np.percentile(lum, 98.0)
-            if p98 > p2 + 1e-3:
-                factor = 255.0 / (p98 - p2)
-            else:
-                factor = 1.0
-            return round(max(0.5, min(3.0, factor)), 2)
+            rgb = rgb_u8.astype(np.float32) / 255.0
+            lum = (
+                0.299 * rgb[..., 0] +
+                0.587 * rgb[..., 1] +
+                0.114 * rgb[..., 2]
+            )
+            p2, p98 = np.percentile(lum, [2.0, 98.0])
+            dynamic = p98 - p2
+
+            if dynamic < 0.03:
+                self.state.contrast_center = float(np.median(lum))
+                return 1.0
+
+            factor = 1.0 / dynamic
+            factor = float(np.clip(factor, 0.8, 3.0))
+
+            self.state.contrast_center = float(np.median(lum))
+            return round(factor, 2)
         except Exception as e:
             print(f"[RASCAL] Auto contrast computation failed: {e}")
+            self.state.contrast_center = 0.5
             return 1.0
 
     def _on_auto_contrast_clicked(self, checked):
@@ -5986,6 +6030,7 @@ class MainWindow(QtWidgets.QMainWindow):
             factor = self._compute_auto_contrast()
             self._set_contrast(factor, mark_dirty=True, invalidate_auto=False)
         else:
+            self.state.contrast_center = 0.5
             self._set_contrast(1.0, mark_dirty=True, invalidate_auto=False)
 
     def _on_pol_btn_clicked(self):
@@ -7361,6 +7406,7 @@ class MainWindow(QtWidgets.QMainWindow):
             json.dump(data, f, indent=2)
         self._session_dirty = False
         self._last_session_path = path
+        QtCore.QSettings("Rascal", "rascal").setValue("last_session_dir", os.path.dirname(os.path.abspath(path)))
 
     def save_quaternion(self):
         """Saves the session: quaternion + brush mask + image path to a .rasc (JSON) file."""
@@ -7394,12 +7440,12 @@ class MainWindow(QtWidgets.QMainWindow):
     def _browse_sessions(self):
         """Opens a custom dialog showing .rasc files with thumbnails.
         Returns the selected file path or None if cancelled."""
-        # Determine initial directory
+        # Determine initial directory: last session path > persisted QSettings dir
         init_dir = ""
         if self._last_session_path:
             init_dir = os.path.dirname(self._last_session_path)
-        elif self.state.current_image_path:
-            init_dir = os.path.dirname(os.path.abspath(self.state.current_image_path))
+        if not init_dir:
+            init_dir = QtCore.QSettings("Rascal", "rascal").value("last_session_dir", "")
 
         dlg = _SessionBrowserDialog(init_dir, self)
         if dlg.exec_() == QtWidgets.QDialog.Accepted:
@@ -7439,7 +7485,7 @@ class MainWindow(QtWidgets.QMainWindow):
             work_img_b64 = data.get('work_img')  # legacy v3 fallback
             loaded_from_embedded_raw = False
             if not os.path.isfile(img_path):
-                fallback_b64 = raw_img_b64 or work_img_b64
+                fallback_b64 = raw_img_b64 or work_img_b64 or data.get('state_img')
                 if not fallback_b64:
                     QtWidgets.QMessageBox.warning(self, "Session",
                         f"Image not found:\n{data.get('image_path', '')}\n"
@@ -7866,6 +7912,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if not path:
             return
         self._load_session_from_path(path)
+        QtCore.QSettings("Rascal", "rascal").setValue("last_session_dir", os.path.dirname(os.path.abspath(path)))
 
     # ---------- JPG export ----------
     @staticmethod
@@ -7934,7 +7981,11 @@ class MainWindow(QtWidgets.QMainWindow):
         # 6. linear → sRGB  (via LUT, identical to shader's lut_lookup_rgb)
         color = self._lut_apply(lut_l2s, xo)
 
-        # 7. Channel extraction for R/G/B modes
+        # 7. Manual contrast adjustment (must match GPU shader:
+        #    base_color = clamp((base_color - u_contrast_center) * u_contrast + u_contrast_center, 0.0, 1.0))
+        color = np.clip((color - np.float32(st.contrast_center)) * np.float32(st.contrast) + np.float32(st.contrast_center), 0.0, 1.0)
+
+        # 8. Channel extraction for R/G/B modes
         if mode == 1:
             grey = color[..., 0]
             color = np.stack([grey, grey, grey], axis=-1)
@@ -8261,7 +8312,7 @@ class MainWindow(QtWidgets.QMainWindow):
         dlg.setTextFormat(QtCore.Qt.RichText)
         dlg.setText(
             "Rascal — Colour visualisation tool<br><br>"
-            "Version 1.6.9<br>"
+            "Version 1.7.1<br>"
             "Contact: Fabrice.Monna@ube.fr<br><br>"
             "© 2026 - Fabrice Monna - All rights reserved"
         )
