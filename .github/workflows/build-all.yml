@@ -142,6 +142,16 @@ jobs:
           find release -type f -maxdepth 3 -exec cp {} final/ \;
           ls -lh final
 
+      - name: Test GitLab authentication
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          GITLAB_HOST: ${{ secrets.GITLAB_HOST }}
+          PROJECT_ID: ${{ secrets.GITLAB_PROJECT_ID }}
+        run: |
+          curl --fail \
+            --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+            "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}"
+
       - name: Upload assets to GitLab Package Registry
         env:
           GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
