@@ -16,7 +16,7 @@ import xml.etree.ElementTree as ET
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 APP_NAME        = "Rascal"
-APP_VERSION     = "1.7.1"
+APP_VERSION     = "1.8.2"
 APP_MANUFACTURER = "Fabrice Monna"
 UPGRADE_CODE    = "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"  # keep stable across versions
 ENTRY_SCRIPT    = "Rascal.py"
@@ -226,7 +226,7 @@ def generate_wxs(wxs_path: pathlib.Path):
     tree = ET.ElementTree(wix)
     ET.indent(tree, space="  ")
     tree.write(str(wxs_path), encoding="utf-8", xml_declaration=True)
-    print(f"WXS written -> {wxs_path}")
+    print(f"WXS written → {wxs_path}")
 
 
 # ── WiX bitmap helpers ───────────────────────────────────────────────────────
@@ -393,7 +393,7 @@ https://scipy.org/
         print(f"License.rtf already present — skipping regeneration ({rtf_path})")
         return
     rtf_path.write_text(rtf_content, encoding="ascii", errors="replace")
-    print(f"License.rtf written -> {rtf_path}")
+    print(f"License.rtf written → {rtf_path}")
 
 
 # ── Step 3 : WiX build (v3: candle + light) ──────────────────────────────────
@@ -406,18 +406,18 @@ def run_wix(wxs_path: pathlib.Path):
 
     wix_ui_dir = _find_wix_ui_dir()
 
-    # candle: compile wxs -> wixobj
+    # candle: compile wxs → wixobj
     candle_cmd = ["candle", str(wxs_path), "-out", str(wixobj),
                   "-arch", "x64", "-ext", "WixUIExtension"]
     print("Running:", " ".join(candle_cmd))
     subprocess.run(candle_cmd, check=True, cwd=str(HERE))
 
-    # light: link wixobj -> msi
+    # light: link wixobj → msi
     light_cmd = ["light", str(wixobj), "-out", str(out),
                  "-ext", "WixUIExtension", "-cultures:en-us", "-sice:ICE60"]
     print("Running:", " ".join(light_cmd))
     subprocess.run(light_cmd, check=True, cwd=str(HERE))
-    print(f"\nMSI ready -> {out}")
+    print(f"\nMSI ready → {out}")
 
 
 def _find_wix_ui_dir() -> str:
