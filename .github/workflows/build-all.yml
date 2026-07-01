@@ -142,7 +142,79 @@ jobs:
           find release -type f -maxdepth 3 -exec cp {} final/ \;
           ls -lh final
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
-        with:
-          files: final/*
+      - name: Upload assets to GitLab Package Registry
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          GITLAB_HOST: ${{ secrets.GITLAB_HOST }}
+          PROJECT_ID: ${{ secrets.GITLAB_PROJECT_ID }}
+        run: |
+          set -e
+
+          VERSION_TAG="${GITHUB_REF_NAME}"
+          VERSION="${VERSION_TAG#v}"
+          PACKAGE_NAME="rascal"
+
+          for file in final/*; do
+            filename=$(basename "$file")
+            echo "Uploading $filename to GitLab..."
+
+            curl --fail \
+              --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+              --upload-file "$file" \
+              "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/packages/generic/${PACKAGE_NAME}/${VERSION}/${filename}"
+          done
+
+      - name: Create or update GitLab Release
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          GITLAB_HOST: ${{ secrets.GITLAB_HOST }}
+          PROJECT_ID: ${{ secrets.GITLAB_PROJECT_ID }}
+        run: |
+          set -e
+
+          VERSION_TAG="${GITHUB_REF_NAME}"
+          VERSION="${VERSION_TAG#v}"
+          PACKAGE_NAME="rascal"
+
+          LINKS_JSON="[]"
+
+          for file in final/*; do
+            filename=$(basename "$file")
+            url="${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/packages/generic/${PACKAGE_NAME}/${VERSION}/${filename}"
+
+            LINKS_JSON=$(echo "$LINKS_JSON" | jq \
+              --arg name "$filename" \
+              --arg url "$url" \
+              '. + [{"name": $name, "url": $url}]')
+          done
+
+          DATA=$(jq -n \
+            --arg name "RASCAL ${VERSION_TAG}" \
+            --arg tag_name "${VERSION_TAG}" \
+            --arg description "Automated RASCAL release built by GitHub Actions." \
+            --argjson links "$LINKS_JSON" \
+            '{
+              name: $name,
+              tag_name: $tag_name,
+              description: $description,
+              assets: {
+                links: $links
+              }
+            }')
+
+          echo "$DATA"
+
+          # Try to create the release.
+          # If it already exists, update it.
+          curl --silent --show-error --fail \
+            --request POST \
+            --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --data "$DATA" \
+            "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/releases" \
+          || curl --silent --show-error --fail \
+            --request PUT \
+            --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --data "$DATA" \
+            "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/releases/${VERSION_TAG}"
