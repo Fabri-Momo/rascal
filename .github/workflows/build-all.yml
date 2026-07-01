@@ -72,7 +72,7 @@ jobs:
           pip install pyinstaller pywin32
 
       - name: Install WiX
-        run: choco install wixtoolset --version=3.14.1 -y
+        run: choco install wixtoolset -y --force
 
       - name: Build MSI
         run: |
