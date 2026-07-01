@@ -1,0 +1,148 @@
+name: Build all RASCAL releases
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-26
+            dmg: RASCAL-macOS-arm64.dmg
+          - arch: intel
+            runner: macos-26-intel
+            dmg: RASCAL-macOS-intel.dmg
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build macOS app
+        run: |
+          python setup_macos.py
+
+      - name: Create DMG
+        run: |
+          hdiutil create \
+            -volname RASCAL \
+            -srcfolder dist/Rascal.app \
+            -ov \
+            -format UDZO \
+            dist/${{ matrix.dmg }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.dmg }}
+          path: dist/${{ matrix.dmg }}
+
+  windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller pywin32
+
+      - name: Install WiX
+        run: choco install wixtoolset --version=3.14.1 -y
+
+      - name: Build MSI
+        run: |
+          python build_windows_msi.py
+
+      - name: Rename MSI
+        shell: bash
+        run: |
+          mkdir -p release
+          cp dist/*.msi release/RASCAL-Windows-x64.msi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RASCAL-Windows-x64.msi
+          path: release/RASCAL-Windows-x64.msi
+
+  linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            python3 python3-pip python3-venv \
+            libgl1 libglx-mesa0 libegl1 \
+            libxkbcommon-x11-0 libxcb-xinerama0 \
+            libxcb-icccm4 libxcb-keysyms1 libxcb-render-util0 libxcb-cursor0 \
+            fuse libfuse2
+
+      - name: Install Python dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build Linux AppImage
+        run: |
+          python3 setup_linux.py
+          python3 build_linux_appimage.py
+
+      - name: Rename AppImage
+        run: |
+          mkdir -p release
+          cp dist/Rascal-x86_64.AppImage release/RASCAL-Linux-x86_64.AppImage
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RASCAL-Linux-x86_64.AppImage
+          path: release/RASCAL-Linux-x86_64.AppImage
+
+  release:
+    needs: [macos, windows, linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+
+      - name: Flatten release files
+        run: |
+          mkdir final
+          find release -type f -maxdepth 3 -exec cp {} final/ \;
+          ls -lh final
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: final/*
