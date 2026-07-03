@@ -174,6 +174,29 @@ jobs:
               "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/packages/generic/${PACKAGE_NAME}/${VERSION}/${filename}"
           done
 
+      - name: Create tag on GitLab (if missing)
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          GITLAB_HOST: ${{ secrets.GITLAB_HOST }}
+          PROJECT_ID: ${{ secrets.GITLAB_PROJECT_ID }}
+        run: |
+          VERSION_TAG="${GITHUB_REF_NAME}"
+
+          # Get the SHA of the tag from GitLab default branch HEAD
+          SHA=$(curl --silent --fail \
+            --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+            "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/repository/branches/main" \
+            | jq -r '.commit.id')
+
+          echo "Creating tag ${VERSION_TAG} at ${SHA} on GitLab (ignoring if already exists)..."
+
+          curl --silent --show-error \
+            --request POST \
+            --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --data "{\"tag_name\": \"${VERSION_TAG}\", \"ref\": \"${SHA}\"}" \
+            "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/repository/tags" || true
+
       - name: Create or update GitLab Release
         env:
           GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
@@ -214,17 +237,24 @@ jobs:
 
           echo "$DATA"
 
-          # Try to create the release.
-          # If it already exists, update it.
-          curl --silent --show-error --fail \
+          HTTP_CODE=$(curl --silent --output /tmp/gitlab_response.json --write-out "%{http_code}" \
             --request POST \
             --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
             --header "Content-Type: application/json" \
             --data "$DATA" \
-            "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/releases" \
-          || curl --silent --show-error --fail \
-            --request PUT \
-            --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
-            --header "Content-Type: application/json" \
-            --data "$DATA" \
-            "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/releases/${VERSION_TAG}"
+            "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/releases")
+
+          echo "POST /releases → HTTP ${HTTP_CODE}"
+          cat /tmp/gitlab_response.json
+
+          if [ "$HTTP_CODE" -eq 200 ] || [ "$HTTP_CODE" -eq 201 ]; then
+            echo "Release created successfully."
+          else
+            echo "Release already exists or error, attempting PUT update..."
+            curl --silent --show-error --fail \
+              --request PUT \
+              --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+              --header "Content-Type: application/json" \
+              --data "$DATA" \
+              "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/releases/${VERSION_TAG}"
+          fi
