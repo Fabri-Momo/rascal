@@ -180,21 +180,20 @@ jobs:
           GITLAB_HOST: ${{ secrets.GITLAB_HOST }}
           PROJECT_ID: ${{ secrets.GITLAB_PROJECT_ID }}
         run: |
-          VERSION_TAG="${GITHUB_REF_NAME}"
+          VERSION="${GITHUB_REF_NAME#v}"
 
-          # Get the SHA of the tag from GitLab default branch HEAD
           SHA=$(curl --silent --fail \
             --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
             "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/repository/branches/main" \
             | jq -r '.commit.id')
 
-          echo "Creating tag ${VERSION_TAG} at ${SHA} on GitLab (ignoring if already exists)..."
+          echo "Creating tag ${VERSION} at ${SHA} on GitLab (ignoring if already exists)..."
 
           curl --silent --show-error \
             --request POST \
             --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
             --header "Content-Type: application/json" \
-            --data "{\"tag_name\": \"${VERSION_TAG}\", \"ref\": \"${SHA}\"}" \
+            --data "{\"tag_name\": \"${VERSION}\", \"ref\": \"${SHA}\"}" \
             "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/repository/tags" || true
 
       - name: Create or update GitLab Release
@@ -205,8 +204,7 @@ jobs:
         run: |
           set -e
 
-          VERSION_TAG="${GITHUB_REF_NAME}"
-          VERSION="${VERSION_TAG#v}"
+          VERSION="${GITHUB_REF_NAME#v}"
           PACKAGE_NAME="rascal"
 
           LINKS_JSON="[]"
@@ -222,8 +220,8 @@ jobs:
           done
 
           DATA=$(jq -n \
-            --arg name "RASCAL ${VERSION_TAG}" \
-            --arg tag_name "${VERSION_TAG}" \
+            --arg name "RASCAL ${VERSION}" \
+            --arg tag_name "${VERSION}" \
             --arg description "Automated RASCAL release built by GitHub Actions." \
             --argjson links "$LINKS_JSON" \
             '{
@@ -256,5 +254,5 @@ jobs:
               --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
               --header "Content-Type: application/json" \
               --data "$DATA" \
-              "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/releases/${VERSION_TAG}"
+              "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/releases/${VERSION}"
           fi
