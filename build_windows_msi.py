@@ -16,7 +16,7 @@ import xml.etree.ElementTree as ET
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 APP_NAME        = "Rascal"
-APP_VERSION     = "1.8.6"
+APP_VERSION     = "1.8.7"
 APP_MANUFACTURER = "Fabrice Monna"
 UPGRADE_CODE    = "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"  # keep stable across versions
 ENTRY_SCRIPT    = "Rascal.py"
