@@ -242,8 +242,13 @@ def radial_normalisation_fibonacci(Zs, K=FIB_K, q=FIB_Q, m=FIB_M, sigma=FIB_SIGM
     np.divide(Zs, norms[:, None] + 1e-8, out=U)
 
     _cb(15, "Assigning to Voronoi sectors…")
-    # Larger chunks for better vectorization, but still avoid N×K allocation
-    CHUNK = 100_000
+    # Limit chunk size for large images to keep per-chunk dot-product allocation small
+    if U.shape[0] > 10_000_000:
+        CHUNK = 25_000
+    elif U.shape[0] > 5_000_000:
+        CHUNK = 50_000
+    else:
+        CHUNK = 100_000
     labels = np.empty(U.shape[0], dtype=np.int32)
     for start in range(0, U.shape[0], CHUNK):
         end = min(start + CHUNK, U.shape[0])
@@ -276,12 +281,19 @@ def radial_normalisation_fibonacci(Zs, K=FIB_K, q=FIB_Q, m=FIB_M, sigma=FIB_SIGM
     _cb(35, "Local interpolation (parallel computation)…")
     N = Zs.shape[0]
 
-    # Determine worker count
+    # Scale down workers and batch sizes for large images to avoid OOM crash.
+    # Each batch allocates (batch_size × K × 4) bytes for dots_batch inside
+    # _fib_process_batch, so keeping batches small is critical on big images.
     if n_workers is None:
-        n_workers = min(4, multiprocessing.cpu_count())
-
-    # Adaptive batch sizing: larger batches = less overhead, but more memory
-    batch_size = max(1000, N // (n_workers * 4))
+        if N > 10_000_000:
+            n_workers = 1
+            batch_size = 25_000
+        elif N > 5_000_000:
+            n_workers = 2
+            batch_size = 50_000
+        else:
+            n_workers = min(4, multiprocessing.cpu_count())
+            batch_size = max(1000, N // (n_workers * 4))
 
     # Pre-allocate result array and prepare batch metadata
     Zs_norm = np.empty_like(Zs)
@@ -374,6 +386,14 @@ class FibNormWorker(QtCore.QThread):
             img_norm = ColorUtils.linear_to_srgb_np(Xl_norm).reshape(self.img_srgb_orig.shape)
             self.finished.emit(img_norm.astype(np.float32), Zs_norm.astype(np.float32))
         except InterruptedError:
+            self.finished.emit(None, None)
+        except MemoryError:
+            self.error.emit(
+                "Not enough memory to process this image.\n\n"
+                "Suggestions:\n"
+                "  • Close other applications to free RAM.\n"
+                "  • Reduce the image size via Modify Image before using Radial Push."
+            )
             self.finished.emit(None, None)
         except Exception as e:
             self.error.emit(str(e))
@@ -6210,6 +6230,8 @@ class MainWindow(QtWidgets.QMainWindow):
         if brush is not None and brush.max() > 0.5:
             paint_mask = brush[..., 0].ravel() > 0.5
 
+        self._fib_err_msg = None
+        self._fib_cancelled = False
         self._fib_worker = FibNormWorker(
             st.img_srgb_orig.copy(), st.mu_lin.copy(),
             st.W_lin.copy(), st.Winv_lin.copy(),
@@ -8312,7 +8334,7 @@ class MainWindow(QtWidgets.QMainWindow):
         dlg.setTextFormat(QtCore.Qt.RichText)
         dlg.setText(
             "Rascal — Colour visualisation tool<br><br>"
-            "Version 1.8.2<br>"
+            "Version 1.8.5<br>"
             "Contact: Fabrice.Monna@ube.fr<br><br>"
             "© 2026 - Fabrice Monna - All rights reserved"
         )

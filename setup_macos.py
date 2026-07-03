@@ -22,6 +22,7 @@ ASSETS = [
     "rascal_splash.png",
     "sphere_cube_flat.png",
     "rascal_clean.ico",
+    "rascal_clean.icns",
     "camera.svg",
     "file-upload.svg",
     "reset.svg",
@@ -41,6 +42,7 @@ for asset in ASSETS:
 # macOS wants .icns for a native app icon.
 # If you do not yet have rascal.icns, the build still works without --icon.
 ICON_CANDIDATES = [
+    HERE / "rascal_clean.icns",
     HERE / "rascal.icns",
     HERE / "icon.icns",
 ]
