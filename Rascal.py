@@ -8334,7 +8334,7 @@ class MainWindow(QtWidgets.QMainWindow):
         dlg.setTextFormat(QtCore.Qt.RichText)
         dlg.setText(
             "Rascal — Colour visualisation tool<br><br>"
-            "Version 1.8.5<br>"
+            "Version 1.8.6<br>"
             "Contact: Fabrice.Monna@ube.fr<br><br>"
             "© 2026 - Fabrice Monna - All rights reserved"
         )
