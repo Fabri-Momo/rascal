@@ -228,7 +228,7 @@ def generate_wxs(wxs_path: pathlib.Path):
     tree = ET.ElementTree(wix)
     ET.indent(tree, space="  ")
     tree.write(str(wxs_path), encoding="utf-8", xml_declaration=True)
-    print(f"WXS written → {wxs_path}")
+    print(f"WXS written -> {wxs_path}")
 
 
 # ── WiX bitmap helpers ───────────────────────────────────────────────────────
@@ -395,7 +395,7 @@ https://scipy.org/
         print(f"License.rtf already present — skipping regeneration ({rtf_path})")
         return
     rtf_path.write_text(rtf_content, encoding="ascii", errors="replace")
-    print(f"License.rtf written → {rtf_path}")
+    print(f"License.rtf written -> {rtf_path}")
 
 
 # ── Step 3 : WiX build (v3: candle + light) ──────────────────────────────────
@@ -419,7 +419,7 @@ def run_wix(wxs_path: pathlib.Path):
                  "-ext", "WixUIExtension", "-cultures:en-us", "-sice:ICE60"]
     print("Running:", " ".join(light_cmd))
     subprocess.run(light_cmd, check=True, cwd=str(HERE))
-    print(f"\nMSI ready → {out}")
+    print(f"\nMSI ready -> {out}")
 
 
 def _find_wix_ui_dir() -> str:
