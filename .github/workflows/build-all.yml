@@ -19,7 +19,7 @@ jobs:
             runner: macos-15
             dmg: RASCAL-macOS-arm64.dmg
           - arch: intel
-            runner: macos-14
+            runner: macos-15-intel
             dmg: RASCAL-macOS-intel.dmg
 
     runs-on: ${{ matrix.runner }}
