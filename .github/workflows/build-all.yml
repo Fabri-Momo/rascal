@@ -145,6 +145,14 @@ jobs:
           find release -type f -maxdepth 3 -exec cp {} final/ \;
           ls -lh final
 
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: RASCAL ${{ github.ref_name }}
+          files: final/*
+          generate_release_notes: false
+
       - name: Test GitLab authentication
         env:
           GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
