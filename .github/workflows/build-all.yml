@@ -148,7 +148,8 @@ jobs:
         run: |
           GITLAB_DOMAIN=$(echo "${GITLAB_HOST}" | sed 's|https://||')
           git remote add gitlab "https://oauth2:${GITLAB_TOKEN}@${GITLAB_DOMAIN}/fmonna/rascal.git"
-          git push gitlab --mirror
+          git push gitlab main --force
+          git push gitlab --tags --force
 
       - uses: actions/download-artifact@v4
         with:
