@@ -135,6 +135,21 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
 
     steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Mirror code to GitLab
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          GITLAB_HOST: ${{ secrets.GITLAB_HOST }}
+        run: |
+          GITLAB_DOMAIN=$(echo "${GITLAB_HOST}" | sed 's|https://||')
+          git remote add gitlab "https://oauth2:${GITLAB_TOKEN}@${GITLAB_DOMAIN}/fmonna/rascal.git"
+          git push gitlab --mirror
+
       - uses: actions/download-artifact@v4
         with:
           path: release
