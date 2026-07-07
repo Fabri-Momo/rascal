@@ -1493,7 +1493,8 @@ class TexturedModelWidget(QOpenGLWidget):
         GL.glDeleteShader(vs)
         GL.glDeleteShader(fs)
 
-        self._vao = GL.glGenVertexArrays(1)
+        if not IS_MACOS:
+            self._vao = GL.glGenVertexArrays(1)
         self._vbo = GL.glGenBuffers(1)
         self._ebo = GL.glGenBuffers(1)
 
@@ -1561,7 +1562,8 @@ class TexturedModelWidget(QOpenGLWidget):
     def _upload_mesh(self):
         if self._program is None or self._vertices_interleaved is None or self._indices is None:
             return
-        GL.glBindVertexArray(self._vao)
+        if not IS_MACOS:
+            GL.glBindVertexArray(self._vao)
         GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self._vbo)
         GL.glBufferData(GL.GL_ARRAY_BUFFER, self._vertices_interleaved.nbytes,
                         self._vertices_interleaved, GL.GL_STATIC_DRAW)
@@ -1575,7 +1577,8 @@ class TexturedModelWidget(QOpenGLWidget):
         GL.glVertexAttribPointer(loc_pos, 3, GL.GL_FLOAT, GL.GL_FALSE, stride, ctypes.c_void_p(0))
         GL.glEnableVertexAttribArray(loc_uv)
         GL.glVertexAttribPointer(loc_uv,  2, GL.GL_FLOAT, GL.GL_FALSE, stride, ctypes.c_void_p(12))
-        GL.glBindVertexArray(0)
+        if not IS_MACOS:
+            GL.glBindVertexArray(0)
 
     def _upload_float_tex(self, tid, img_f32):
         """Upload a float32 (H,W,3) sRGB image to a GL texture."""
@@ -1652,9 +1655,22 @@ class TexturedModelWidget(QOpenGLWidget):
             GL.glBindTexture(GL.GL_TEXTURE_2D, tid)
             GL.glUniform1i(_loc(name), unit)
 
-        GL.glBindVertexArray(self._vao)
+        if IS_MACOS:
+            # No VAO on macOS GL 2.1 — bind VBO + attributes directly
+            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self._vbo)
+            GL.glBindBuffer(GL.GL_ELEMENT_ARRAY_BUFFER, self._ebo)
+            stride = 5 * 4
+            loc_pos = GL.glGetAttribLocation(self._program, 'a_position')
+            loc_uv  = GL.glGetAttribLocation(self._program, 'a_uv')
+            GL.glEnableVertexAttribArray(loc_pos)
+            GL.glVertexAttribPointer(loc_pos, 3, GL.GL_FLOAT, GL.GL_FALSE, stride, ctypes.c_void_p(0))
+            GL.glEnableVertexAttribArray(loc_uv)
+            GL.glVertexAttribPointer(loc_uv, 2, GL.GL_FLOAT, GL.GL_FALSE, stride, ctypes.c_void_p(12))
+        else:
+            GL.glBindVertexArray(self._vao)
         GL.glDrawElements(GL.GL_TRIANGLES, self._index_count, GL.GL_UNSIGNED_INT, None)
-        GL.glBindVertexArray(0)
+        if not IS_MACOS:
+            GL.glBindVertexArray(0)
         for unit in range(5):
             GL.glActiveTexture(GL.GL_TEXTURE0 + unit)
             GL.glBindTexture(GL.GL_TEXTURE_2D, 0)
