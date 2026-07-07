@@ -46,8 +46,9 @@ jobs:
 
       - name: Create DMG
         run: |
+          rm -f dist/${{ matrix.dmg }}
           hdiutil create \
-            -volname RASCAL \
+            -volname "RASCAL-${{ matrix.arch }}" \
             -srcfolder dist/Rascal.app \
             -ov \
             -format UDZO \
