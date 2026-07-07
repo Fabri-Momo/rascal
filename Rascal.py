@@ -1245,6 +1245,14 @@ class _ModelHost(QtWidgets.QWidget):
 class TexturedModelWidget(QOpenGLWidget):
     def __init__(self, app_state, parent=None):
         super().__init__(parent)
+        # On macOS the default surface format is GL 2.1 (for vispy compat), but
+        # this widget needs GLSL 150 core → request a 4.1 Core context explicitly.
+        if IS_MACOS:
+            fmt = QtGui.QSurfaceFormat()
+            fmt.setVersion(4, 1)
+            fmt.setProfile(QtGui.QSurfaceFormat.CoreProfile)
+            fmt.setDepthBufferSize(24)
+            self.setFormat(fmt)
         self.state = app_state
         self.setMinimumSize(240, 240)
         self._program = None
@@ -1365,6 +1373,14 @@ class TexturedModelWidget(QOpenGLWidget):
         self.set_texture_image()
 
     def initializeGL(self):
+        try:
+            self._initializeGL_impl()
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"[RASCAL] initializeGL FAILED: {e}")
+
+    def _initializeGL_impl(self):
         _glsl_ver = "#version 150" if IS_LINUX else "#version 150 core"
         vert = f"""
         {_glsl_ver}
@@ -8334,7 +8350,7 @@ class MainWindow(QtWidgets.QMainWindow):
         dlg.setTextFormat(QtCore.Qt.RichText)
         dlg.setText(
             "Rascal — Colour visualisation tool<br><br>"
-            "Version 1.8.7<br>"
+            "Version 1.8.8<br>"
             "Contact: Fabrice.Monna@ube.fr<br><br>"
             "© 2026 - Fabrice Monna - All rights reserved"
         )
