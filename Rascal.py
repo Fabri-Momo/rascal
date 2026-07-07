@@ -1350,6 +1350,8 @@ class TexturedModelWidget(QOpenGLWidget):
 
     def set_texture_image(self):
         """Uploads img_srgb_orig and img_srgb_view from AppState to GPU — no CPU transform."""
+        if not getattr(self, '_gl_ready', False):
+            return
         if self._tex is None or self._tex_orig is None:
             return
         if self.context() is None or not self.context().isValid():
@@ -1365,12 +1367,26 @@ class TexturedModelWidget(QOpenGLWidget):
         self.set_texture_image()
 
     def initializeGL(self):
+        # Defer heavy GL work (shader compile, texture alloc) until a mesh
+        # is actually loaded.  This avoids a costly GL context negotiation
+        # on macOS at application start-up.
+        self._gl_ready = False
+
+    def _ensure_gl(self):
+        """Lazily perform the full GL initialisation on first real use."""
+        if self._gl_ready:
+            return True
         try:
+            self.makeCurrent()
             self._initializeGL_impl()
+            self._gl_ready = True
+            self.doneCurrent()
+            return True
         except Exception as e:
             import traceback
             traceback.print_exc()
             print(f"[RASCAL] initializeGL FAILED: {e}")
+            return False
 
     def _initializeGL_impl(self):
         if IS_MACOS:
@@ -1523,6 +1539,8 @@ class TexturedModelWidget(QOpenGLWidget):
 
     def set_brush_texture(self, brush_alpha):
         """Public method: upload brush overlay and refresh the 3D view."""
+        if not getattr(self, '_gl_ready', False):
+            return
         if self._tex_brush is None:
             return
         if self.context() is None or not self.context().isValid():
@@ -1585,7 +1603,11 @@ class TexturedModelWidget(QOpenGLWidget):
     def paintGL(self):
         GL.glClearColor(0.08, 0.08, 0.08, 1.0)
         GL.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
-        if not self._has_mesh or self._program is None or self._index_count == 0:
+        if not self._has_mesh or self._index_count == 0:
+            return
+        if not getattr(self, '_gl_ready', False) and not self._ensure_gl():
+            return
+        if self._program is None:
             return
         proj  = self._perspective(45.0, self.width() / float(max(1, self.height())), 0.01, 100.0)
         pan3  = np.array([self._pan[0], self._pan[1], 0.0], dtype=np.float32)
