@@ -1245,14 +1245,6 @@ class _ModelHost(QtWidgets.QWidget):
 class TexturedModelWidget(QOpenGLWidget):
     def __init__(self, app_state, parent=None):
         super().__init__(parent)
-        # On macOS the default surface format is GL 2.1 (for vispy compat), but
-        # this widget needs GLSL 150 core → request a 4.1 Core context explicitly.
-        if IS_MACOS:
-            fmt = QtGui.QSurfaceFormat()
-            fmt.setVersion(4, 1)
-            fmt.setProfile(QtGui.QSurfaceFormat.CoreProfile)
-            fmt.setDepthBufferSize(24)
-            self.setFormat(fmt)
         self.state = app_state
         self.setMinimumSize(240, 240)
         self._program = None
@@ -1381,12 +1373,37 @@ class TexturedModelWidget(QOpenGLWidget):
             print(f"[RASCAL] initializeGL FAILED: {e}")
 
     def _initializeGL_impl(self):
-        _glsl_ver = "#version 150" if IS_LINUX else "#version 150 core"
+        if IS_MACOS:
+            # macOS default context is GL 2.1 (for vispy compat) → use GLSL 120
+            _glsl_ver = "#version 120"
+            _attr = "attribute"
+            _vary_out = "varying"   # vertex shader output
+            _vary_in  = "varying"   # fragment shader input
+            _tex_fn   = "texture2D"
+            _frag_out_decl = ""     # gl_FragColor is built-in
+            _frag_out      = "gl_FragColor"
+        elif IS_LINUX:
+            _glsl_ver = "#version 150"
+            _attr = "in"
+            _vary_out = "out"
+            _vary_in  = "in"
+            _tex_fn   = "texture"
+            _frag_out_decl = "out vec4 fragColor;"
+            _frag_out      = "fragColor"
+        else:
+            _glsl_ver = "#version 150 core"
+            _attr = "in"
+            _vary_out = "out"
+            _vary_in  = "in"
+            _tex_fn   = "texture"
+            _frag_out_decl = "out vec4 fragColor;"
+            _frag_out      = "fragColor"
+
         vert = f"""
         {_glsl_ver}
-        in vec3 a_position;
-        in vec2 a_uv;
-        out vec2 v_uv;
+        {_attr} vec3 a_position;
+        {_attr} vec2 a_uv;
+        {_vary_out} vec2 v_uv;
         uniform mat4 u_mvp;
         void main() {{
             v_uv = a_uv;
@@ -1395,8 +1412,8 @@ class TexturedModelWidget(QOpenGLWidget):
         """
         frag = f"""
         {_glsl_ver}
-        in vec2 v_uv;
-        out vec4 fragColor;
+        {_vary_in} vec2 v_uv;
+        {_frag_out_decl}
 
         uniform sampler2D u_tex;
         uniform sampler2D u_tex_orig;
@@ -1422,14 +1439,14 @@ class TexturedModelWidget(QOpenGLWidget):
             float ur = mix(u0, 1.0 - u0, clamp(x.r, 0.0, 1.0));
             float ug = mix(u0, 1.0 - u0, clamp(x.g, 0.0, 1.0));
             float ub = mix(u0, 1.0 - u0, clamp(x.b, 0.0, 1.0));
-            vec3 sr = texture(lut, vec2(ur, 0.5)).rgb;
-            vec3 sg = texture(lut, vec2(ug, 0.5)).rgb;
-            vec3 sb = texture(lut, vec2(ub, 0.5)).rgb;
+            vec3 sr = {_tex_fn}(lut, vec2(ur, 0.5)).rgb;
+            vec3 sg = {_tex_fn}(lut, vec2(ug, 0.5)).rgb;
+            vec3 sb = {_tex_fn}(lut, vec2(ub, 0.5)).rgb;
             return vec3(sr.r, sg.g, sb.b);
         }}
 
         void main() {{
-            vec3 xs_orig = texture(u_tex_orig, v_uv).rgb;
+            vec3 xs_orig = {_tex_fn}(u_tex_orig, v_uv).rgb;
             vec3 xl0     = lut_lookup_rgb(u_lut_s2l, u_lut_size, xs_orig);
             vec3 z       = W_lin * (xl0 - mu_lin);
             vec3 z2      = Ruser * z * u_push;
@@ -1441,12 +1458,12 @@ class TexturedModelWidget(QOpenGLWidget):
             color = clamp((color - u_contrast_center) * u_contrast + u_contrast_center, 0.0, 1.0);
 
             if (u_use_brush == 1) {{
-                float a = texture(u_brush, v_uv).r;
+                float a = {_tex_fn}(u_brush, v_uv).r;
                 vec3 brushColor = vec3(1.0, 1.0, 0.0);
                 color = mix(color, brushColor, clamp(a, 0.0, 0.5));
             }}
 
-            fragColor    = vec4(color, 1.0);
+            {_frag_out}    = vec4(color, 1.0);
         }}
         """
         self._program = GL.glCreateProgram()
