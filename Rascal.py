@@ -1373,14 +1373,13 @@ class TexturedModelWidget(QOpenGLWidget):
         self._gl_ready = False
 
     def _ensure_gl(self):
-        """Lazily perform the full GL initialisation on first real use."""
+        """Lazily perform the full GL initialisation on first real use.
+        Called from paintGL which already has the context current."""
         if self._gl_ready:
             return True
         try:
-            self.makeCurrent()
             self._initializeGL_impl()
             self._gl_ready = True
-            self.doneCurrent()
             return True
         except Exception as e:
             import traceback
@@ -5759,6 +5758,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self._apply_model_ui_level(self.model_ui_level)
             self._update_status_bar()
             QtCore.QTimer.singleShot(0, self._equalize_3d_views)
+            # Force a repaint of the texture widget after layout settles (macOS fix)
+            QtCore.QTimer.singleShot(50, self.w_model_tex.update)
             if getattr(self, '_welcome_mode', False):
                 self._set_welcome_mode(False)
 
