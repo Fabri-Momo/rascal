@@ -13,7 +13,7 @@
 set -euo pipefail
 
 VERSION="${1:?Usage: $0 VERSION (ex: 1.8.9)}"
-GH_REPO="Fabri-Momo/rascal-build-macos"
+GH_REPO="Fabri-Momo/rascal"
 GITLAB_HOST="${GITLAB_HOST:-https://gitlab.huma-num.fr}"
 PROJECT_ID="${GITLAB_PROJECT_ID:-fmonna%2Frascal}"
 PACKAGE_NAME="rascal"

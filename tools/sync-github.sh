@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-GH_REPO="Fabri-Momo/rascal-build-macos"
+GH_REPO="Fabri-Momo/rascal"
 GH_URL="https://github.com/${GH_REPO}.git"
 
 cd "$(git rev-parse --show-toplevel)"
