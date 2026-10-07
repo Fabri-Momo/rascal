@@ -1,0 +1,20 @@
+# IDE files
+.vscode/
+.idea/
+*.iml
+*.code-workspace
+
+# Build outputs
+build/
+target/
+out/
+
+# Gradle
+.gradle/
+
+# Android
+local.properties
+
+# OS files
+.DS_Store
+Thumbs.db

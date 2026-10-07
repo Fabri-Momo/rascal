@@ -1,0 +1,533 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000"
+    tools:ignore="Overdraw">
+
+    <ImageView
+        android:id="@+id/splashImage"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_marginStart="20dp"
+        android:layout_marginEnd="20dp"
+        android:adjustViewBounds="true"
+        android:scaleType="fitCenter"
+        android:src="@drawable/rascal_splash"
+        android:contentDescription="@string/app_name" />
+
+    <android.opengl.GLSurfaceView
+        android:id="@+id/glSurfaceView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <View
+        android:id="@+id/roiOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/topOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:orientation="vertical"
+        android:paddingTop="48dp"
+        android:paddingBottom="4dp"
+        android:background="#80000000">
+
+        <!-- Ligne 1 : Load + Info (toujours visible) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:gravity="center_vertical">
+
+            <Button
+                android:id="@+id/btnLoadImage"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:text="@string/load_image"
+                android:textSize="12sp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:background="@android:color/transparent"
+                android:textColor="#FFFFFF"
+                android:minWidth="0dp" />
+
+            <Button
+                android:id="@+id/btnPreset"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:text="@string/preset"
+                android:textSize="12sp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:background="@android:color/transparent"
+                android:textColor="#FFFFFF"
+                android:minWidth="0dp"
+                android:visibility="gone" />
+
+            <Button
+                android:id="@+id/btnPreset1"
+                android:layout_width="24dp"
+                android:layout_height="36dp"
+                android:text="@string/preset_1"
+                android:textSize="11sp"
+                android:padding="0dp"
+                android:background="@android:color/transparent"
+                android:textColor="#AACCFF"
+                android:minWidth="0dp"
+                android:visibility="gone" />
+
+            <Button
+                android:id="@+id/btnPreset2"
+                android:layout_width="24dp"
+                android:layout_height="36dp"
+                android:text="@string/preset_2"
+                android:textSize="11sp"
+                android:padding="0dp"
+                android:background="@android:color/transparent"
+                android:textColor="#AACCFF"
+                android:minWidth="0dp"
+                android:visibility="gone" />
+
+            <Button
+                android:id="@+id/btnPreset3"
+                android:layout_width="24dp"
+                android:layout_height="36dp"
+                android:text="@string/preset_3"
+                android:textSize="11sp"
+                android:padding="0dp"
+                android:background="@android:color/transparent"
+                android:textColor="#AACCFF"
+                android:minWidth="0dp"
+                android:visibility="gone" />
+
+            <Button
+                android:id="@+id/btnPreset4"
+                android:layout_width="24dp"
+                android:layout_height="36dp"
+                android:text="@string/preset_4"
+                android:textSize="11sp"
+                android:padding="0dp"
+                android:background="@android:color/transparent"
+                android:textColor="#AACCFF"
+                android:minWidth="0dp"
+                android:visibility="gone" />
+
+            <Button
+                android:id="@+id/btnPreset5"
+                android:layout_width="24dp"
+                android:layout_height="36dp"
+                android:text="@string/preset_5"
+                android:textSize="11sp"
+                android:padding="0dp"
+                android:background="@android:color/transparent"
+                android:textColor="#AACCFF"
+                android:minWidth="0dp"
+                android:visibility="gone" />
+
+            <Button
+                android:id="@+id/btnPresetClear"
+                android:layout_width="28dp"
+                android:layout_height="36dp"
+                android:text="@string/btn_remove"
+                android:textSize="16sp"
+                android:padding="0dp"
+                android:background="@android:color/transparent"
+                android:textColor="#FF6666"
+                android:minWidth="0dp"
+                android:visibility="gone" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <Button
+                android:id="@+id/btnRandom"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:text="@string/btn_random"
+                android:textSize="12sp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:background="@android:color/transparent"
+                android:textColor="#FFFFFF"
+                android:minWidth="0dp" />
+
+            <Button
+                android:id="@+id/btnInfo"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:text="@string/btn_info"
+                android:textSize="12sp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:background="@android:color/transparent"
+                android:textColor="#FFFFFF"
+                android:minWidth="0dp" />
+
+        </LinearLayout>
+
+        <!-- Ligne 2 : C R G B + ROI + Reset + Save (visible quand image chargée) -->
+        <LinearLayout
+            android:id="@+id/imageControls"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:gravity="center_vertical"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:id="@+id/channelControls"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                tools:ignore="ButtonStyle">
+
+                <Button
+                    android:id="@+id/btnChannelC"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:text="@string/channel_c"
+                    android:textSize="14sp"
+                    android:padding="0dp"
+                    android:background="@android:color/transparent"
+                    android:textColor="#FF0000"
+                    android:minWidth="0dp" />
+
+                <Button
+                    android:id="@+id/btnChannelR"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:text="@string/channel_r"
+                    android:textSize="14sp"
+                    android:padding="0dp"
+                    android:background="@android:color/transparent"
+                    android:textColor="#FFFFFF"
+                    android:minWidth="0dp" />
+
+                <Button
+                    android:id="@+id/btnChannelG"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:text="@string/channel_g"
+                    android:textSize="14sp"
+                    android:padding="0dp"
+                    android:background="@android:color/transparent"
+                    android:textColor="#FFFFFF"
+                    android:minWidth="0dp" />
+
+                <Button
+                    android:id="@+id/btnChannelB"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:text="@string/channel_b"
+                    android:textSize="14sp"
+                    android:padding="0dp"
+                    android:background="@android:color/transparent"
+                    android:textColor="#FFFFFF"
+                    android:minWidth="0dp" />
+
+            </LinearLayout>
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <Button
+                android:id="@+id/btnROI"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:text="@string/btn_roi"
+                android:textSize="12sp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:background="@android:color/transparent"
+                android:textColor="#FFFFFF"
+                android:minWidth="0dp" />
+
+            <Button
+                android:id="@+id/btnICA"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:text="@string/btn_ica"
+                android:textSize="12sp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:background="@android:color/transparent"
+                android:textColor="#FFFFFF"
+                android:minWidth="0dp" />
+
+            <Button
+                android:id="@+id/btnReset"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:text="@string/reset"
+                android:textSize="12sp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:background="@android:color/transparent"
+                android:textColor="#FFFFFF"
+                android:minWidth="0dp" />
+
+            <Button
+                android:id="@+id/btnSplit"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:text="@string/btn_split"
+                android:textSize="12sp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:background="@android:color/transparent"
+                android:textColor="#FFFFFF"
+                android:minWidth="0dp" />
+
+            <Button
+                android:id="@+id/btnSave"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:text="@string/save"
+                android:textSize="12sp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:background="@android:color/transparent"
+                android:textColor="#FFFFFF"
+                android:minWidth="0dp" />
+
+        </LinearLayout>
+
+        <!-- Ligne 3 : Var + Push (visible quand image chargée) -->
+        <LinearLayout
+            android:id="@+id/varPushControls"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="4dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="40dp"
+                    android:layout_height="wrap_content"
+                    android:text="@string/var_label"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    android:gravity="center" />
+
+                <SeekBar
+                    android:id="@+id/seekBarVarRestore"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="4dp"
+                    android:max="100"
+                    android:progress="100" />
+
+                <TextView
+                    android:id="@+id/labelVarRestore"
+                    android:layout_width="44dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:text="@string/default_factor"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    android:gravity="end" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="2dp">
+
+                <TextView
+                    android:layout_width="40dp"
+                    android:layout_height="wrap_content"
+                    android:text="@string/push_label"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    android:gravity="center" />
+
+                <SeekBar
+                    android:id="@+id/seekBarPushFactor"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="4dp"
+                    android:max="500"
+                    android:progress="100" />
+
+                <TextView
+                    android:id="@+id/labelPushFactor"
+                    android:layout_width="44dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:text="@string/default_factor"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    android:gravity="end" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/bottomOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:orientation="vertical"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="64dp"
+        android:background="#80000000"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/roiHintText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/roi_hint"
+            android:textColor="#FFFF00"
+            android:textSize="12sp"
+            android:gravity="center"
+            android:paddingBottom="8dp"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="24dp"
+                android:layout_height="wrap_content"
+                android:text="@string/axis_x"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:gravity="center" />
+
+            <SeekBar
+                android:id="@+id/seekBarRotX"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:max="360"
+                android:progress="180" />
+
+            <TextView
+                android:id="@+id/labelRotX"
+                android:layout_width="40dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="@string/angle_zero"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:gravity="end" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="4dp">
+
+            <TextView
+                android:layout_width="24dp"
+                android:layout_height="wrap_content"
+                android:text="@string/axis_y"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:gravity="center" />
+
+            <SeekBar
+                android:id="@+id/seekBarRotY"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:max="360"
+                android:progress="180" />
+
+            <TextView
+                android:id="@+id/labelRotY"
+                android:layout_width="40dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="@string/angle_zero"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:gravity="end" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="4dp">
+
+            <TextView
+                android:layout_width="24dp"
+                android:layout_height="wrap_content"
+                android:text="@string/axis_z"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:gravity="center" />
+
+            <SeekBar
+                android:id="@+id/seekBarRotZ"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:max="360"
+                android:progress="180" />
+
+            <TextView
+                android:id="@+id/labelRotZ"
+                android:layout_width="40dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="@string/angle_zero"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:gravity="end" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</FrameLayout>

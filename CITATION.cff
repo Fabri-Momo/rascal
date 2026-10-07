@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+title: "RASCAL"
+message: "If you use RASCAL, please cite the associated publication."
+type: software
+authors:
+  - family-names: "Monna"
+    given-names: "Fabrice"
+repository-code: "https://gricad-gitlab.univ-grenoble-alpes.fr/"
+license: "GPL-3.0-only"
+version: "1.8.7"
+date-released: "2026-07-03"

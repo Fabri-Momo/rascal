@@ -1,0 +1,340 @@
+name: Sync GitLab and build RASCAL releases
+
+# Ce dépôt GitHub est un miroir "instantané" du dépôt GitLab
+# (gitlab.huma-num.fr/fmonna/rascal) : l'arbre est synchronisé à chaque run,
+# sans l'historique GitLab (celui-ci contient des fichiers > 100 Mo que
+# GitHub rejette ; l'historique de référence reste sur GitLab).
+# Ce workflow se lance manuellement depuis l'onglet Actions de GitHub :
+#   - sans version : synchronise le miroir uniquement
+#   - avec version (ex : 1.8.9) : synchronise, build les 3 OS, crée la release
+#     GitHub (tag vX.Y.Z) puis la release GitLab (tag X.Y.Z + paquets).
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version à releaser (ex: 1.8.9) — vide = synchro seule"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch GitLab source
+        id: gitlab
+        run: |
+          git clone --depth 1 https://gitlab.huma-num.fr/fmonna/rascal.git /tmp/rascal
+          echo "sha=$(git -C /tmp/rascal rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: List files too large for GitHub (> 99 MB)
+        run: |
+          cd /tmp/rascal
+          find . -type f -size +99M -printf '%P\n' | tee /tmp/bigfiles.txt
+
+      - name: Sync tree (rsync, excluding oversized files)
+        run: |
+          rsync -a --delete \
+            --exclude='.git' \
+            --exclude-from=/tmp/bigfiles.txt \
+            /tmp/rascal/ ./
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Already in sync."
+          else
+            git commit -m "Sync from GitLab ${{ steps.gitlab.outputs.sha }}"
+            git push origin main
+          fi
+
+  macos:
+    needs: sync
+    if: inputs.version != ''
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+            dmg: RASCAL-macOS-arm64.dmg
+          - arch: intel
+            runner: macos-15-intel
+            dmg: RASCAL-macOS-intel.dmg
+
+    runs-on: ${{ matrix.runner }}
+
+    defaults:
+      run:
+        working-directory: desktop
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install system dependencies
+        run: brew install libraw
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build macOS app
+        run: |
+          python setup_macos.py
+
+      - name: Create DMG
+        run: |
+          rm -f dist/${{ matrix.dmg }}
+          hdiutil create \
+            -volname "RASCAL-${{ matrix.arch }}" \
+            -srcfolder dist/Rascal.app \
+            -ov \
+            -format UDZO \
+            dist/${{ matrix.dmg }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.dmg }}
+          path: desktop/dist/${{ matrix.dmg }}
+
+  windows:
+    needs: sync
+    if: inputs.version != ''
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        working-directory: desktop
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller pywin32
+
+      - name: Install WiX
+        run: choco install wixtoolset -y --force
+
+      - name: Build MSI
+        run: |
+          python build_windows_msi.py
+
+      - name: Rename MSI
+        shell: bash
+        run: |
+          mkdir -p release
+          cp dist/*.msi release/RASCAL-Windows-x64.msi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RASCAL-Windows-x64.msi
+          path: desktop/release/RASCAL-Windows-x64.msi
+
+  linux:
+    needs: sync
+    if: inputs.version != ''
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: desktop
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            python3 python3-pip python3-venv \
+            libgl1 libglx-mesa0 libegl1 \
+            libxkbcommon-x11-0 libxcb-xinerama0 \
+            libxcb-icccm4 libxcb-keysyms1 libxcb-render-util0 libxcb-cursor0 \
+            fuse libfuse2
+
+      - name: Install Python dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build Linux AppImage
+        run: |
+          python3 setup_linux.py
+          python3 build_linux_appimage.py
+
+      - name: Rename AppImage
+        run: |
+          mkdir -p release
+          cp dist/Rascal-x86_64.AppImage release/RASCAL-Linux-x86_64.AppImage
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RASCAL-Linux-x86_64.AppImage
+          path: desktop/release/RASCAL-Linux-x86_64.AppImage
+
+  release:
+    needs: [macos, windows, linux]
+    runs-on: ubuntu-latest
+    if: inputs.version != ''
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+
+      - name: Flatten release files
+        run: |
+          mkdir final
+          find release -type f -maxdepth 3 -exec cp {} final/ \;
+          ls -lh final
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          target_commitish: main
+          name: RASCAL v${{ inputs.version }}
+          files: final/*
+          generate_release_notes: false
+
+      - name: Test GitLab authentication
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          GITLAB_HOST: ${{ secrets.GITLAB_HOST }}
+          PROJECT_ID: ${{ secrets.GITLAB_PROJECT_ID }}
+        run: |
+          curl --fail \
+            --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+            "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}"
+
+      - name: Upload assets to GitLab Package Registry
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          GITLAB_HOST: ${{ secrets.GITLAB_HOST }}
+          PROJECT_ID: ${{ secrets.GITLAB_PROJECT_ID }}
+        run: |
+          set -e
+
+          VERSION="${{ inputs.version }}"
+          PACKAGE_NAME="rascal"
+
+          for file in final/*; do
+            filename=$(basename "$file")
+            echo "Uploading $filename to GitLab..."
+
+            curl --fail \
+              --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+              --upload-file "$file" \
+              "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/packages/generic/${PACKAGE_NAME}/${VERSION}/${filename}"
+          done
+
+      - name: Create tag on GitLab (if missing)
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          GITLAB_HOST: ${{ secrets.GITLAB_HOST }}
+          PROJECT_ID: ${{ secrets.GITLAB_PROJECT_ID }}
+        run: |
+          VERSION="${{ inputs.version }}"
+
+          SHA=$(curl --silent --fail \
+            --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+            "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/repository/branches/main" \
+            | jq -r '.commit.id')
+
+          echo "Creating tag ${VERSION} at ${SHA} on GitLab (ignoring if already exists)..."
+
+          curl --silent --show-error \
+            --request POST \
+            --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --data "{\"tag_name\": \"${VERSION}\", \"ref\": \"${SHA}\"}" \
+            "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/repository/tags" || true
+
+      - name: Create or update GitLab Release
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          GITLAB_HOST: ${{ secrets.GITLAB_HOST }}
+          PROJECT_ID: ${{ secrets.GITLAB_PROJECT_ID }}
+        run: |
+          set -e
+
+          VERSION="${{ inputs.version }}"
+          PACKAGE_NAME="rascal"
+
+          LINKS_JSON="[]"
+
+          for file in final/*; do
+            filename=$(basename "$file")
+            url="${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/packages/generic/${PACKAGE_NAME}/${VERSION}/${filename}"
+
+            LINKS_JSON=$(echo "$LINKS_JSON" | jq \
+              --arg name "$filename" \
+              --arg url "$url" \
+              '. + [{"name": $name, "url": $url}]')
+          done
+
+          DATA=$(jq -n \
+            --arg name "RASCAL ${VERSION}" \
+            --arg tag_name "${VERSION}" \
+            --arg description "Automated RASCAL release built by GitHub Actions." \
+            --argjson links "$LINKS_JSON" \
+            '{
+              name: $name,
+              tag_name: $tag_name,
+              description: $description,
+              assets: {
+                links: $links
+              }
+            }')
+
+          echo "$DATA"
+
+          HTTP_CODE=$(curl --silent --output /tmp/gitlab_response.json --write-out "%{http_code}" \
+            --request POST \
+            --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --data "$DATA" \
+            "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/releases")
+
+          echo "POST /releases → HTTP ${HTTP_CODE}"
+          cat /tmp/gitlab_response.json
+
+          if [ "$HTTP_CODE" -eq 200 ] || [ "$HTTP_CODE" -eq 201 ]; then
+            echo "Release created successfully."
+          else
+            echo "Release already exists or error, attempting PUT update..."
+            curl --silent --show-error --fail \
+              --request PUT \
+              --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+              --header "Content-Type: application/json" \
+              --data "$DATA" \
+              "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/releases/${VERSION}"
+          fi

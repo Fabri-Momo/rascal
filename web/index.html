@@ -1,0 +1,1976 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Rascal WebGL — ZCA + Rotation</title>
+<style>
+  body { margin: 0; font-family: system-ui, sans-serif; background: #1a1a1a; color: #eee; }
+  #app { display: flex; flex-direction: row; height: 100vh; height: 100dvh; }
+  #toolbar { width: 220px; padding: 14px; background: #222; border-right: 1px solid #333; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; flex-shrink: 0; }
+  #toolbar img { max-width: 100%; height: auto; display: block; margin-bottom: 8px; }
+  #toolbar label { font-size: 12px; color: #aaa; }
+  #fileInputHidden { display: none; }
+  #filePickerBtn { padding: 8px 12px; background: #444; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; text-align: left; width: 100%; }
+  #filePickerBtn:hover { background: #555; }
+  #fileNameLabel { font-size: 11px; color: #888; word-break: break-all; }
+  #toolbar .group { display: flex; flex-direction: row; align-items: center; gap: 6px; }
+  #toolbar .group label { min-width: 32px; font-size: 12px; color: #aaa; flex-shrink: 0; }
+  #toolbar .group input[type="range"] { flex: 1; min-width: 0; }
+  #toolbar .group span { font-size: 11px; color: #ccc; min-width: 34px; text-align: right; flex-shrink: 0; }
+  #toolbar button { padding: 8px 12px; background: #444; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+  #toolbar button:hover { background: #555; }
+  #status { margin-top: auto; font-size: 11px; color: #888; }
+  #main-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+  #top-bar { display: flex; flex-direction: column; background: #222; border-bottom: 1px solid #333; flex-shrink: 0; }
+  #topbar-row1 { display: flex; gap: 6px; padding: 8px 12px; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; align-items: center; }
+  #topbar-row1::-webkit-scrollbar { display: none; }
+  #topbar-modes { display: flex; gap: 6px; }
+  #topbar-presets { display: flex; gap: 6px; align-items: center; margin-left: 6px; }
+  #topbar-row2 { display: none; }
+  .topbar-tool { padding: 6px 12px; background: #444; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 13px; flex: 1; }
+  .topbar-tool:hover { background: #555; }
+  .mode-btn { padding: 6px 16px; background: #444; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; flex-shrink: 0; }
+  .mode-btn:hover { background: #555; }
+  .mode-btn.active { background: #2a6; }
+  #randomBtn { padding: 6px 16px; background: #444; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; flex-shrink: 0; }
+  #randomBtn:hover { background: #555; }
+  #randomBtn.active { background: #c60; }
+  #savePresetBtn { padding: 6px 16px; background: #444; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; flex-shrink: 0; }
+  #savePresetBtn:hover { background: #555; }
+  #clearPresetsBtn { padding: 6px 12px; background: #622; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 16px; line-height: 1; flex-shrink: 0; }
+  #clearPresetsBtn:hover { background: #833; }
+  #preset-container { display: flex; gap: 4px; }
+  .preset-btn { width: 28px; height: 28px; padding: 0; background: #445; color: #fff; border: 1px solid #888; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; flex-shrink: 0; }
+  .preset-btn:hover { background: #668; }
+  #canvas-container { flex: 1; position: relative; overflow: hidden; }
+  canvas { display: block; width: 100%; height: 100%; outline: none; touch-action: none; }
+  #roiCanvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; display: none; cursor: crosshair; touch-action: none; }
+  #roiCanvas.active { pointer-events: all; display: block; }
+  #loading { position: absolute; inset: 0; display: none; place-items: center; background: rgba(0,0,0,0.6); color: #fff; font-size: 16px; }
+  #roiBtn.active { background: #c60; }
+
+  /* ---- Wrappers desktop (inchangé) ---- */
+  #toolbar-header { display: contents; }
+  #toolbar-open-block { display: contents; }
+  #toolbar-actions { display: contents; }
+  #randomBtnProxy { display: none; }
+  #toolbar-tools { display: contents; }
+  #rot-sliders { display: contents; }
+
+  /* ---- Responsive : tablette (≤900px) ---- */
+  @media (max-width: 900px) {
+    #app { flex-direction: column; }
+    #toolbar {
+      width: auto;
+      flex-direction: row;
+      flex-wrap: wrap;
+      border-right: none;
+      border-bottom: 1px solid #333;
+      padding: 10px 12px;
+      gap: 8px 12px;
+      overflow-y: visible;
+      overflow-x: auto;
+      max-height: 220px;
+      -webkit-overflow-scrolling: touch;
+      align-items: center;
+    }
+    /* Logo + bouton + labels sur une ligne */
+    #toolbar-header {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      flex-shrink: 0;
+    }
+    #toolbar img { display: block; max-height: 36px; width: auto; margin-bottom: 0; flex-shrink: 0; }
+    #toolbar-open-block {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+      min-width: 0;
+    }
+    #filePickerBtn { width: auto; flex-shrink: 0; }
+    #fileNameLabel { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #localNote { display: none; }
+    /* Reset + ICA + Random sur une ligne */
+    #toolbar-actions {
+      display: flex;
+      flex-direction: row;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    #toolbar-tools {
+      display: flex;
+      flex-direction: row;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    #toolbar .group { flex-direction: row; align-items: center; gap: 6px; white-space: nowrap; }
+    #toolbar .group input[type="range"] { width: 90px; }
+    #toolbar .group span { min-width: 34px; font-size: 11px; }
+    #toolbar label { min-width: 60px; }
+    #status { margin-top: 0; }
+    #main-area { flex: 1; min-height: 0; }
+  }
+
+  /* ---- Responsive : téléphone (≤600px) ---- */
+  @media (max-width: 600px) {
+    #app { flex-direction: column; }
+
+    /* ── Toolbar : ligne LOAD + filename ── */
+    #toolbar {
+      width: auto; flex-direction: column; flex-wrap: nowrap;
+      border-right: none; border-bottom: 1px solid #333;
+      padding: 5px 10px; gap: 4px; overflow: visible; flex-shrink: 0;
+    }
+    #toolbar-header { display: flex; flex-direction: row; align-items: center; gap: 8px; width: 100%; }
+    #toolbar img { display: none; }
+    #toolbar-open-block { display: flex; flex-direction: row; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+    #filePickerBtn { flex-shrink: 0; font-size: 12px; padding: 5px 10px; width: auto; }
+    #fileNameLabel { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+    #localNote { display: none; }
+    #status { display: none; }
+
+    /* ── Var + Push en lignes compactes ── */
+    #toolbar > .group { flex-direction: row; align-items: center; gap: 4px; width: 100%; }
+    #toolbar > .group label { min-width: 28px; max-width: 28px; font-size: 12px; flex-shrink: 0; }
+    #toolbar > .group input[type="range"] { flex: 1; min-width: 0; width: 100%; }
+    #toolbar > .group span { min-width: 30px; max-width: 30px; font-size: 11px; text-align: right; flex-shrink: 0; }
+
+    /* ── Masquer les anciens blocs remplacés par top-bar ── */
+    #toolbar-actions { display: none; }
+    #toolbar-tools { display: none; }
+
+    /* ── rot-sliders fixé en bas ── */
+    #rot-sliders {
+      display: flex; flex-direction: column; gap: 10px;
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 10;
+      background: #1e1e1e; border-top: 1px solid #333;
+      padding: 5px 12px env(safe-area-inset-bottom, 5px);
+    }
+    #rot-sliders .group { display: flex; flex-direction: row; align-items: center; gap: 8px; }
+    #rot-sliders .group label { min-width: 14px; font-size: 12px; color: #aaa; }
+    #rot-sliders .group input[type="range"] { flex: 1; }
+    #rot-sliders .group span { min-width: 30px; font-size: 11px; text-align: right; color: #ccc; }
+
+    /* ── main-area : compenser le rot-sliders fixe ≈110px ── */
+    #main-area { flex: 1; min-height: 0; margin-bottom: 110px; }
+
+    /* ── top-bar mobile : deux lignes ── */
+    #top-bar { flex-direction: column; }
+    #topbar-row1 { padding: 5px 8px; gap: 5px; justify-content: space-between; }
+    #topbar-modes { gap: 4px; }
+    .mode-btn { padding: 6px 13px; font-size: 13px; }
+    #topbar-presets { gap: 4px; margin-left: auto; }
+    #savePresetBtn { padding: 5px 8px; font-size: 12px; }
+    #clearPresetsBtn { padding: 5px 8px; font-size: 13px; }
+    #randomBtn { padding: 5px 8px; font-size: 12px; }
+
+    /* Ligne 2 : ROI ICA Reset Pol Split Export */
+    #topbar-row2 { display: flex; gap: 4px; padding: 4px 8px 5px; border-top: 1px solid #2a2a2a; }
+    .topbar-tool { padding: 6px 4px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="toolbar">
+    <div id="toolbar-header">
+      <img src="rascal_splash.png" alt="Rascal" id="splashLogo">
+      <div id="toolbar-open-block">
+        <input type="file" id="fileInput" accept="image/*" style="display:none">
+        <button id="filePickerBtn">Open image…</button>
+        <span id="fileNameLabel">No file selected</span>
+        <span id="localNote" style="font-size:10px;color:#666;line-height:1.3;">🔒 Processed locally — nothing is uploaded.</span>
+      </div>
+    </div>
+    <div id="rot-sliders">
+      <div class="group">
+        <label>X</label>
+        <input type="range" id="rotX" min="-180" max="180" value="0">
+        <span id="valX">0°</span>
+      </div>
+      <div class="group">
+        <label>Y</label>
+        <input type="range" id="rotY" min="-180" max="180" value="0">
+        <span id="valY">0°</span>
+      </div>
+      <div class="group">
+        <label>Z</label>
+        <input type="range" id="rotZ" min="-180" max="180" value="0">
+        <span id="valZ">0°</span>
+      </div>
+    </div>
+    <div class="group">
+      <label>Push</label>
+      <input type="range" id="push" min="0.1" max="3.0" step="0.01" value="1.0">
+      <span id="valPush">1.0</span>
+    </div>
+    <div class="group">
+      <label>Var</label>
+      <input type="range" id="varRestore" min="0.0" max="1.0" step="0.01" value="1.0">
+      <span id="valVar">1.00</span>
+    </div>
+    <div id="toolbar-actions">
+      <button id="resetBtn">Reset</button>
+      <button id="icaBtn">ICA</button>
+      <button id="randomBtnProxy">Random</button>
+    </div>
+    <div id="toolbar-tools">
+      <button id="polBtn">Pol. +/-</button>
+      <button id="roiBtn">ROI</button>
+      <button id="splitBtn">Split</button>
+      <button id="exportBtn">Export view</button>
+    </div>
+    <span id="status">No image</span>
+  </div>
+  <div id="main-area">
+    <div id="top-bar">
+      <div id="topbar-row1">
+        <div id="topbar-modes">
+          <button class="mode-btn active" data-mode="0">C</button>
+          <button class="mode-btn" data-mode="1">R</button>
+          <button class="mode-btn" data-mode="2">G</button>
+          <button class="mode-btn" data-mode="3">B</button>
+          <button id="randomBtn">Rand</button>
+        </div>
+        <div id="topbar-presets">
+          <button id="savePresetBtn">Preset</button>
+          <div id="preset-container"></div>
+          <button id="clearPresetsBtn">×</button>
+        </div>
+      </div>
+      <div id="topbar-row2">
+        <button id="roiBtn2" class="topbar-tool">ROI</button>
+        <button id="icaBtn2" class="topbar-tool">ICA</button>
+        <button id="resetBtn2" class="topbar-tool">Reset</button>
+        <button id="polBtn2" class="topbar-tool">Pol</button>
+        <button id="splitBtn2" class="topbar-tool">Split</button>
+        <button id="exportBtn2" class="topbar-tool">Export</button>
+      </div>
+    </div>
+    <div id="canvas-container">
+      <canvas id="glCanvas"></canvas>
+      <canvas id="roiCanvas"></canvas>
+      <div id="loading">Computing ZCA…</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('glCanvas');
+const gl = canvas.getContext('webgl2', { alpha: false, premultipliedAlpha: false });
+if (!gl) {
+  alert('WebGL2 not supported. Try a recent Chrome/Firefox/Edge.');
+  throw new Error('WebGL2 not supported');
+}
+
+const statusEl = document.getElementById('status');
+const loadingEl = document.getElementById('loading');
+const roiCanvas = document.getElementById('roiCanvas');
+const roiCtx = roiCanvas.getContext('2d');
+const roiBtn = document.getElementById('roiBtn');
+const rotX = document.getElementById('rotX');
+const rotY = document.getElementById('rotY');
+const rotZ = document.getElementById('rotZ');
+const push = document.getElementById('push');
+const varRestore = document.getElementById('varRestore');
+const fileInput = document.getElementById('fileInput');
+const resetBtn = document.getElementById('resetBtn');
+const icaBtn = document.getElementById('icaBtn');
+const polBtn = document.getElementById('polBtn');
+const splitBtn = document.getElementById('splitBtn');
+const exportBtn = document.getElementById('exportBtn');
+const randomBtn = document.getElementById('randomBtn');
+const savePresetBtn = document.getElementById('savePresetBtn');
+const clearPresetsBtn = document.getElementById('clearPresetsBtn');
+const presetContainer = document.getElementById('preset-container');
+const randomBtnProxy = document.getElementById('randomBtnProxy');
+
+const valX = document.getElementById('valX');
+const valY = document.getElementById('valY');
+const valZ = document.getElementById('valZ');
+const valPush = document.getElementById('valPush');
+const valVar = document.getElementById('valVar');
+
+// ---------- Maths de base ----------
+const DEG2RAD = Math.PI / 180;
+
+function srgbToLinear(c) {
+  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
+function linearToSrgb(c) {
+  return c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+}
+
+function mat3mul(a, b) {
+  const out = new Float32Array(9);
+  for (let i = 0; i < 3; i++) {
+    for (let j = 0; j < 3; j++) {
+      let s = 0;
+      for (let k = 0; k < 3; k++) s += a[i * 3 + k] * b[k * 3 + j];
+      out[i * 3 + j] = s;
+    }
+  }
+  return out;
+}
+
+function mat3transpose(m) {
+  return new Float32Array([m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]]);
+}
+
+function rotationMatrix(rx, ry, rz) {
+  const cx = Math.cos(rx), sx = Math.sin(rx);
+  const cy = Math.cos(ry), sy = Math.sin(ry);
+  const cz = Math.cos(rz), sz = Math.sin(rz);
+  const Rx = new Float32Array([1, 0, 0, 0, cx, -sx, 0, sx, cx]);
+  const Ry = new Float32Array([cy, 0, sy, 0, 1, 0, -sy, 0, cy]);
+  const Rz = new Float32Array([cz, -sz, 0, sz, cz, 0, 0, 0, 1]);
+  return mat3mul(Rz, mat3mul(Ry, Rx));
+}
+
+function R_to_euler_zyx(R) {
+  // Décompose R = Rz @ Ry @ Rx en (ax, ay, az) en radians
+  const sy = Math.sqrt(R[0] ** 2 + R[3] ** 2);
+  let ax, ay, az;
+  if (sy > 1e-6) {
+    ax = Math.atan2(R[7], R[8]);
+    ay = Math.atan2(-R[6], sy);
+    az = Math.atan2(R[3], R[0]);
+  } else {
+    ax = Math.atan2(-R[5], R[4]);
+    ay = Math.atan2(-R[6], sy);
+    az = 0.0;
+  }
+  return [ax, ay, az];
+}
+
+function quatToR(q) {
+  // q = [w, x, y, z], retourne matrice 3x3 en Float32Array
+  const norm = Math.sqrt(q[0] ** 2 + q[1] ** 2 + q[2] ** 2 + q[3] ** 2);
+  const w = q[0] / norm, x = q[1] / norm, y = q[2] / norm, z = q[3] / norm;
+  return new Float32Array([
+    1 - 2 * y * y - 2 * z * z, 2 * x * y - 2 * z * w,   2 * x * z + 2 * y * w,
+    2 * x * y + 2 * z * w,   1 - 2 * x * x - 2 * z * z, 2 * y * z - 2 * x * w,
+    2 * x * z - 2 * y * w,   2 * y * z + 2 * x * w,   1 - 2 * x * x - 2 * y * y
+  ]);
+}
+
+function randomRotation() {
+  // Rotation aléatoire uniforme via quaternion
+  const u1 = Math.random();
+  const u2 = Math.random();
+  const u3 = Math.random();
+  const s1 = Math.sqrt(1 - u1);
+  const s2 = Math.sqrt(u1);
+  const q = [
+    s1 * Math.sin(2 * Math.PI * u2),
+    s1 * Math.cos(2 * Math.PI * u2),
+    s2 * Math.sin(2 * Math.PI * u3),
+    s2 * Math.cos(2 * Math.PI * u3)
+  ];
+  return quatToR(q);
+}
+
+function svd3x3General(A) {
+  // A est 3x3, retourne {U, s, Vt} avec A = U @ diag(s) @ Vt
+  // Via SVD symétrique de A^T A
+  const AtA = new Float32Array(9);
+  for (let i = 0; i < 3; i++) {
+    for (let j = 0; j < 3; j++) {
+      let s = 0;
+      for (let k = 0; k < 3; k++) s += A[k * 3 + i] * A[k * 3 + j];
+      AtA[i * 3 + j] = s;
+    }
+  }
+  const { U: V, s: s2 } = svd3x3Sym(AtA);
+  const s = new Float32Array([Math.sqrt(Math.max(s2[0], 0)), Math.sqrt(Math.max(s2[1], 0)), Math.sqrt(Math.max(s2[2], 0))]);
+  const eps = 1e-12;
+  const Vt = mat3transpose(V);
+  // U = A @ V @ diag(1/s)
+  const Vinv = new Float32Array(V);
+  Vinv[0] /= (s[0] + eps); Vinv[1] /= (s[1] + eps); Vinv[2] /= (s[2] + eps);
+  Vinv[3] /= (s[0] + eps); Vinv[4] /= (s[1] + eps); Vinv[5] /= (s[2] + eps);
+  Vinv[6] /= (s[0] + eps); Vinv[7] /= (s[1] + eps); Vinv[8] /= (s[2] + eps);
+  const U = mat3mul(A, Vinv);
+  return { U, s, Vt };
+}
+
+function fasticaRotation(Z, maxIter = 200, tol = 1e-6) {
+  // Z: Float32Array de n*3, données blanchies (n échantillons, 3 dims)
+  const n = Z.length / 3;
+  const p = 3;
+  if (n < p) return new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
+  const W = new Float32Array(9);
+  for (let i = 0; i < p; i++) {
+    // Initialisation déterministe : axe canonique i
+    let w = new Float32Array([i === 0 ? 1 : 0, i === 1 ? 1 : 0, i === 2 ? 1 : 0]);
+    for (let iter = 0; iter < maxIter; iter++) {
+      // proj = Z @ w, g = tanh(proj), gp = 1 - g^2
+      const g = new Float32Array(n);
+      let gpSum = 0;
+      for (let k = 0; k < n; k++) {
+        const proj = Z[k * 3] * w[0] + Z[k * 3 + 1] * w[1] + Z[k * 3 + 2] * w[2];
+        const t = Math.tanh(proj);
+        g[k] = t;
+        gpSum += (1 - t * t);
+      }
+      const ztg = new Float32Array(3);
+      for (let k = 0; k < n; k++) {
+        ztg[0] += Z[k * 3] * g[k];
+        ztg[1] += Z[k * 3 + 1] * g[k];
+        ztg[2] += Z[k * 3 + 2] * g[k];
+      }
+      const meanGp = gpSum / n;
+      let wNew = new Float32Array([
+        ztg[0] / n - meanGp * w[0],
+        ztg[1] / n - meanGp * w[1],
+        ztg[2] / n - meanGp * w[2]
+      ]);
+      // Déflation
+      for (let j = 0; j < i; j++) {
+        const dot = wNew[0] * W[j * 3] + wNew[1] * W[j * 3 + 1] + wNew[2] * W[j * 3 + 2];
+        wNew[0] -= dot * W[j * 3];
+        wNew[1] -= dot * W[j * 3 + 1];
+        wNew[2] -= dot * W[j * 3 + 2];
+      }
+      const norm = Math.sqrt(wNew[0] ** 2 + wNew[1] ** 2 + wNew[2] ** 2);
+      if (norm < 1e-12 || !Number.isFinite(norm)) break;
+      wNew[0] /= norm; wNew[1] /= norm; wNew[2] /= norm;
+      const dot = Math.abs(wNew[0] * w[0] + wNew[1] * w[1] + wNew[2] * w[2]);
+      w = wNew;
+      if (Math.abs(dot - 1.0) < tol) break;
+    }
+    W[i * 3] = w[0]; W[i * 3 + 1] = w[1]; W[i * 3 + 2] = w[2];
+  }
+  // Sécurité NaN
+  for (let i = 0; i < 9; i++) if (!Number.isFinite(W[i])) return new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
+  // Orthogonalisation via SVD
+  const { U, Vt } = svd3x3General(W);
+  let R = mat3mul(U, Vt);
+  // Det = +1
+  const det = R[0] * (R[4] * R[8] - R[5] * R[7]) - R[1] * (R[3] * R[8] - R[5] * R[6]) + R[2] * (R[3] * R[7] - R[4] * R[6]);
+  if (det < 0) {
+    R[6] *= -1; R[7] *= -1; R[8] *= -1;
+  }
+  return R;
+}
+
+// SVD 3x3 symétrique par méthode de Jacobi
+function svd3x3Sym(A) {
+  // A est 3x3 symétrique, retourne {U, s} telles que A = U * diag(s) * U^T
+  let U = new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
+  let S = new Float32Array(A);
+  const eps = 1e-10;
+  for (let iter = 0; iter < 50; iter++) {
+    let maxOff = 0;
+    for (let p = 0; p < 3; p++) {
+      for (let q = p + 1; q < 3; q++) {
+        const apq = S[p * 3 + q];
+        const app = S[p * 3 + p];
+        const aqq = S[q * 3 + q];
+        const absApq = Math.abs(apq);
+        if (absApq > maxOff) maxOff = absApq;
+        if (absApq < eps) continue;
+        const phi = 0.5 * Math.atan2(2 * apq, aqq - app);
+        const c = Math.cos(phi), s = Math.sin(phi);
+        const newApp = c * c * app - 2 * s * c * apq + s * s * aqq;
+        const newAqq = s * s * app + 2 * s * c * apq + c * c * aqq;
+        S[p * 3 + p] = newApp;
+        S[q * 3 + q] = newAqq;
+        S[p * 3 + q] = S[q * 3 + p] = 0;
+        for (let k = 0; k < 3; k++) {
+          if (k !== p && k !== q) {
+            const akp = S[k * 3 + p];
+            const akq = S[k * 3 + q];
+            S[k * 3 + p] = S[p * 3 + k] = c * akp - s * akq;
+            S[k * 3 + q] = S[q * 3 + k] = s * akp + c * akq;
+          }
+        }
+        const newU = new Float32Array(9);
+        for (let k = 0; k < 3; k++) {
+          const uP = U[k * 3 + p];
+          const uQ = U[k * 3 + q];
+          newU[k * 3 + p] = c * uP - s * uQ;
+          newU[k * 3 + q] = s * uP + c * uQ;
+          newU[k * 3 + (3 - p - q)] = U[k * 3 + (3 - p - q)];
+        }
+        U = newU;
+      }
+    }
+    if (maxOff < eps) break;
+  }
+  const s = new Float32Array([Math.max(S[0], 0), Math.max(S[4], 0), Math.max(S[8], 0)]);
+  return { U, s };
+}
+
+function zcaFromPixels(rgbFloats) {
+  const n = rgbFloats.length / 3;
+  const mu = new Float32Array(3);
+  for (let i = 0; i < n; i++) {
+    mu[0] += rgbFloats[i * 3];
+    mu[1] += rgbFloats[i * 3 + 1];
+    mu[2] += rgbFloats[i * 3 + 2];
+  }
+  mu[0] /= n; mu[1] /= n; mu[2] /= n;
+
+  const Sigma = new Float32Array(9);
+  for (let i = 0; i < n; i++) {
+    const r = rgbFloats[i * 3] - mu[0];
+    const g = rgbFloats[i * 3 + 1] - mu[1];
+    const b = rgbFloats[i * 3 + 2] - mu[2];
+    Sigma[0] += r * r; Sigma[1] += r * g; Sigma[2] += r * b;
+    Sigma[3] += g * r; Sigma[4] += g * g; Sigma[5] += g * b;
+    Sigma[6] += b * r; Sigma[7] += b * g; Sigma[8] += b * b;
+  }
+  for (let i = 0; i < 9; i++) Sigma[i] /= Math.max(1, n - 1);
+
+  const { U, s } = svd3x3Sym(Sigma);
+  const eps = 1e-8;
+  const l0 = Math.sqrt(s[0] + eps), l1 = Math.sqrt(s[1] + eps), l2 = Math.sqrt(s[2] + eps);
+  const sqrtL = new Float32Array([l0, l1, l2]);
+  const invSqrtL = new Float32Array([1 / l0, 1 / l1, 1 / l2]);
+
+  // W = U * diag(1/sqrt(l)) * U.T
+  const diag = new Float32Array(9);
+  diag[0] = invSqrtL[0]; diag[4] = invSqrtL[1]; diag[8] = invSqrtL[2];
+  const W = mat3mul(U, mat3mul(diag, mat3transpose(U)));
+  // Winv = U * diag(sqrt(l)) * U.T
+  diag[0] = sqrtL[0]; diag[4] = sqrtL[1]; diag[8] = sqrtL[2];
+  const Winv = mat3mul(U, mat3mul(diag, mat3transpose(U)));
+
+  return { mu, W, Winv };
+}
+
+// ---------- WebGL ----------
+const vsSource = `#version 300 es
+precision highp float;
+in vec2 a_position;
+in vec2 a_texcoord;
+uniform float u_zoom_scale;
+uniform vec2 u_zoom_offset;
+uniform vec2 u_aspect_correction;
+out vec2 v_texcoord;
+void main() {
+    vec2 pos = a_position * u_zoom_scale + u_zoom_offset;
+    pos *= u_aspect_correction;
+    gl_Position = vec4(pos, 0.0, 1.0);
+    v_texcoord = vec2(a_texcoord.x, 1.0 - a_texcoord.y);
+}`;
+
+const fsSource = `#version 300 es
+precision highp float;
+uniform sampler2D u_tex_orig;
+uniform mat3 W_lin;
+uniform mat3 Winv_lin;
+uniform vec3 mu_lin;
+uniform mat3 Ruser;
+uniform float u_push;
+uniform float u_var_restore;
+uniform int u_split_active;
+uniform float u_split_pos;
+uniform float u_split_line_w;
+uniform int u_mode;
+in vec2 v_texcoord;
+out vec4 fragColor;
+
+vec3 srgb_to_linear(vec3 c) {
+    vec3 a = vec3(0.055);
+    return mix(c / 12.92, pow((c + a) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
+}
+vec3 linear_to_srgb(vec3 c) {
+    vec3 a = vec3(0.055);
+    return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - a, step(vec3(0.0031308), c));
+}
+
+void main() {
+    vec3 xs_srgb_orig = texture(u_tex_orig, v_texcoord).rgb;
+    vec3 xl0 = srgb_to_linear(xs_srgb_orig);
+
+    vec3 base_color;
+    if (u_split_active == 1 && v_texcoord.x < u_split_pos) {
+        base_color = xs_srgb_orig;
+    } else {
+        vec3 z  = W_lin * (xl0 - mu_lin);
+        vec3 z2 = Ruser * z * u_push;
+        mat3 eff_Winv = mat3(1.0) + u_var_restore * (Winv_lin - mat3(1.0));
+        vec3 xo = clamp(mu_lin + eff_Winv * z2, 0.0, 1.0);
+        base_color = linear_to_srgb(xo);
+    }
+
+    // Channel mode: R / G / B greyscale — only on the processed side (right of split)
+    bool is_orig_side = (u_split_active == 1 && v_texcoord.x < u_split_pos);
+    if (!is_orig_side) {
+        if (u_mode == 1) base_color = vec3(base_color.r);
+        else if (u_mode == 2) base_color = vec3(base_color.g);
+        else if (u_mode == 3) base_color = vec3(base_color.b);
+    }
+
+    // Split line indicator
+    if (u_split_active == 1 && abs(v_texcoord.x - u_split_pos) < u_split_line_w) {
+        base_color = vec3(1.0);
+    }
+
+    fragColor = vec4(base_color, 1.0);
+}`;
+
+function compileShader(type, src) {
+  const sh = gl.createShader(type);
+  gl.shaderSource(sh, src);
+  gl.compileShader(sh);
+  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+    console.error(gl.getShaderInfoLog(sh));
+    throw new Error('Shader compile error');
+  }
+  return sh;
+}
+
+const program = gl.createProgram();
+const vs = compileShader(gl.VERTEX_SHADER, vsSource);
+const fs = compileShader(gl.FRAGMENT_SHADER, fsSource);
+gl.attachShader(program, vs);
+gl.attachShader(program, fs);
+gl.linkProgram(program);
+if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+  console.error(gl.getProgramInfoLog(program));
+  throw new Error('Program link error');
+}
+gl.useProgram(program);
+
+const aPos = gl.getAttribLocation(program, 'a_position');
+const aTex = gl.getAttribLocation(program, 'a_texcoord');
+const vao = gl.createVertexArray();
+gl.bindVertexArray(vao);
+
+const verts = new Float32Array([-1, -1, 0, 0,  1, -1, 1, 0,  -1, 1, 0, 1,  1, 1, 1, 1]);
+const vbo = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
+gl.enableVertexAttribArray(aPos);
+gl.enableVertexAttribArray(aTex);
+gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 16, 0);
+gl.vertexAttribPointer(aTex, 2, gl.FLOAT, false, 16, 8);
+
+const locs = {
+  W_lin: gl.getUniformLocation(program, 'W_lin'),
+  Winv_lin: gl.getUniformLocation(program, 'Winv_lin'),
+  mu_lin: gl.getUniformLocation(program, 'mu_lin'),
+  Ruser: gl.getUniformLocation(program, 'Ruser'),
+  u_push: gl.getUniformLocation(program, 'u_push'),
+  u_var_restore: gl.getUniformLocation(program, 'u_var_restore'),
+  u_split_active: gl.getUniformLocation(program, 'u_split_active'),
+  u_split_pos: gl.getUniformLocation(program, 'u_split_pos'),
+  u_split_line_w: gl.getUniformLocation(program, 'u_split_line_w'),
+  u_mode: gl.getUniformLocation(program, 'u_mode'),
+  u_zoom_scale: gl.getUniformLocation(program, 'u_zoom_scale'),
+  u_zoom_offset: gl.getUniformLocation(program, 'u_zoom_offset'),
+  u_aspect_correction: gl.getUniformLocation(program, 'u_aspect_correction'),
+  u_tex_orig: gl.getUniformLocation(program, 'u_tex_orig'),
+};
+
+const texture = gl.createTexture();
+gl.activeTexture(gl.TEXTURE0);
+gl.bindTexture(gl.TEXTURE_2D, texture);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+let zcaState = {
+  mu: new Float32Array([0.2126, 0.7152, 0.0722]),
+  W: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
+  Winv: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
+};
+let currentLinearSamples = null;
+let currentImage = null;
+let baseImage = null;    // workImage at load time — never overwritten by ROI
+let baseZcaState = null; // ZCA at load time
+const WORK_MAX = 4096;
+let currentFileName = '';
+let presets = [];
+let imageAspect = 1;
+
+const SENS_MOUSE = 0.25;
+const SENS_WHEEL = 8.0;
+
+function wrap180(deg) {
+  let d = (deg + 180.0) % 360.0;
+  if (d < 0) d += 360.0;
+  return d - 180.0;
+}
+
+let viewState = {
+  angX: 0, angY: 0, angZ: 0,
+  zoomLevel: 1.0,
+  zoomCenter: [0, 0],
+  icaActive: false,
+  splitActive: false,
+  splitPos: 0.5,
+  mode: 0,
+  randomActive: false,
+};
+let randomTimer = null;
+let drag = { active: false, x: 0, y: 0, button: 0, ctrl: false };
+let splitDrag = { active: false };
+
+function setUniforms() {
+  gl.uniformMatrix3fv(locs.W_lin, false, zcaState.W);
+  gl.uniformMatrix3fv(locs.Winv_lin, false, zcaState.Winv);
+  gl.uniform3fv(locs.mu_lin, zcaState.mu);
+
+  const rx = wrap180(viewState.angX) * DEG2RAD;
+  const ry = wrap180(viewState.angY) * DEG2RAD;
+  const rz = wrap180(viewState.angZ) * DEG2RAD;
+  const R = rotationMatrix(rx, ry, rz);
+  gl.uniformMatrix3fv(locs.Ruser, false, R);
+  gl.uniform1f(locs.u_push, parseFloat(push.value));
+  gl.uniform1f(locs.u_var_restore, parseFloat(varRestore.value));
+  gl.uniform1i(locs.u_split_active, viewState.splitActive ? 1 : 0);
+  gl.uniform1f(locs.u_split_pos, viewState.splitPos);
+  gl.uniform1f(locs.u_split_line_w, 0.003);
+  gl.uniform1i(locs.u_mode, viewState.mode);
+
+  const scale = 1.0 / viewState.zoomLevel;
+  const off = [viewState.zoomCenter[0] * (1.0 - scale), viewState.zoomCenter[1] * (1.0 - scale)];
+  gl.uniform1f(locs.u_zoom_scale, scale);
+  gl.uniform2fv(locs.u_zoom_offset, off);
+
+  const container = canvas.parentElement;
+  const cw = container.clientWidth;
+  const ch = container.clientHeight;
+  const cAspect = cw / ch;
+  const iAspect = imageAspect;
+  let ax = 1, ay = 1;
+  if (cAspect > iAspect) ax = iAspect / cAspect;
+  else ay = cAspect / iAspect;
+  gl.uniform2fv(locs.u_aspect_correction, [ax, ay]);
+}
+
+function render() {
+  if (canvas.width !== canvas.clientWidth || canvas.height !== canvas.clientHeight) {
+    canvas.width = canvas.clientWidth;
+    canvas.height = canvas.clientHeight;
+    gl.viewport(0, 0, canvas.width, canvas.height);
+  }
+  gl.clearColor(0.1, 0.1, 0.1, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  setUniforms();
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  requestAnimationFrame(render);
+}
+render();
+
+// ---------- Contrôle souris ----------
+function getCanvasRect() {
+  const r = canvas.getBoundingClientRect();
+  return { x: r.left, y: r.top, w: r.width, h: r.height };
+}
+
+function mouseToNdc(mx, my) {
+  const r = getCanvasRect();
+  const ndcX = ((mx - r.x) / r.w) * 2.0 - 1.0;
+  const ndcY = (1.0 - (my - r.y) / r.h) * 2.0 - 1.0;
+  return [ndcX, ndcY];
+}
+
+function isOverImage(mx, my) {
+  const r = getCanvasRect();
+  const cw = r.w, ch = r.h;
+  const cAspect = cw / ch;
+  const iAspect = imageAspect;
+  let w, h, x, y;
+  if (cAspect > iAspect) {
+    h = ch; w = h * iAspect; x = (cw - w) / 2; y = 0;
+  } else {
+    w = cw; h = w / iAspect; x = 0; y = (ch - h) / 2;
+  }
+  return (mx - r.x >= x && mx - r.x <= x + w && my - r.y >= y && my - r.y <= y + h);
+}
+
+function getImageRect() {
+  const r = getCanvasRect();
+  const cw = r.w, ch = r.h;
+  const cAspect = cw / ch;
+  const iAspect = imageAspect;
+  let w, h, x, y;
+  if (cAspect > iAspect) {
+    h = ch; w = h * iAspect; x = (cw - w) / 2; y = 0;
+  } else {
+    w = cw; h = w / iAspect; x = 0; y = (ch - h) / 2;
+  }
+  return { x: r.x + x, y: r.y + y, w, h };
+}
+
+function mouseToTexX(mx) {
+  const ir = getImageRect();
+  if (ir.w <= 0) return null;
+  const ndcX = ((mx - ir.x) / ir.w) * 2.0 - 1.0;
+  const scale = 1.0 / viewState.zoomLevel;
+  const offX = viewState.zoomCenter[0] * (1.0 - scale);
+  const ax = (ndcX - offX) / scale;
+  return (ax + 1.0) * 0.5;
+}
+
+function ndcToTex(ndcX, ndcY) {
+  const scale = 1.0 / viewState.zoomLevel;
+  const offX = viewState.zoomCenter[0] * (1.0 - scale);
+  const offY = viewState.zoomCenter[1] * (1.0 - scale);
+  const ax = (ndcX - offX) / scale;
+  const ay = (ndcY - offY) / scale;
+  return [(ax + 1.0) * 0.5, 1.0 - ((ay + 1.0) * 0.5)];
+}
+
+function syncSliders() {
+  viewState.angX = wrap180(viewState.angX);
+  viewState.angY = wrap180(viewState.angY);
+  viewState.angZ = wrap180(viewState.angZ);
+  rotX.value = Math.round(viewState.angX);
+  rotY.value = Math.round(viewState.angY);
+  rotZ.value = Math.round(viewState.angZ);
+  updateLabels();
+}
+
+function applyZoom(factor, mx, my) {
+  const r = getCanvasRect();
+  const cw = r.w, ch = r.h;
+  const cAspect = cw / ch;
+  const iAspect = imageAspect;
+  let w, h, x, y;
+  if (cAspect > iAspect) {
+    h = ch; w = h * iAspect; x = (cw - w) / 2; y = 0;
+  } else {
+    w = cw; h = w / iAspect; x = 0; y = (ch - h) / 2;
+  }
+  const [ndcX, ndcY] = [((mx - r.x - x) / w) * 2.0 - 1.0, (1.0 - (my - r.y - y) / h) * 2.0 - 1.0];
+
+  const oldZoom = viewState.zoomLevel;
+  const newZoom = Math.max(0.2, Math.min(1.0, oldZoom * factor));
+  if (newZoom === oldZoom) return;
+
+  if (newZoom === 1.0) {
+    viewState.zoomLevel = 1.0;
+    viewState.zoomCenter = [0, 0];
+    return;
+  }
+
+  const oldScale = 1.0 / oldZoom;
+  const oldOffX = viewState.zoomCenter[0] * (1.0 - oldScale);
+  const oldOffY = viewState.zoomCenter[1] * (1.0 - oldScale);
+  const imgX = (ndcX - oldOffX) / oldScale;
+  const imgY = (ndcY - oldOffY) / oldScale;
+  const newScale = 1.0 / newZoom;
+  const newOffX = ndcX - imgX * newScale;
+  const newOffY = ndcY - imgY * newScale;
+  const denom = 1.0 - newScale;
+  viewState.zoomLevel = newZoom;
+  viewState.zoomCenter = [newOffX / denom, newOffY / denom];
+}
+
+// ---------- Support tactile ----------
+let touch = { active: false, x: 0, y: 0, id: null };
+// 2-finger state: pinch (zoom) + twist (rotZ)
+let twoFinger = { active: false, dist: 0, angle: 0, cx: 0, cy: 0 };
+
+function touchDist(t1, t2) {
+  return Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+}
+function touchAngle(t1, t2) {
+  return Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX);
+}
+function touchMidpoint(t1, t2) {
+  return { x: (t1.clientX + t2.clientX) / 2, y: (t1.clientY + t2.clientY) / 2 };
+}
+
+// Double-tap detection (canvas + roiCanvas share the same timer)
+let lastTapTime = 0;
+let lastTapTarget = null;
+
+function handleDoubleTap(target) {
+  if (roiMode) {
+    applyRoi();
+  } else {
+    resetBtn.click();
+  }
+}
+
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  if (e.touches.length === 1) {
+    // Reset 2-finger state when going back to 1 finger
+    twoFinger.active = false;
+    const t = e.touches[0];
+    // Split line drag
+    if (viewState.splitActive) {
+      const tx = mouseToTexX(t.clientX);
+      const grab = 0.04 / Math.max(viewState.zoomLevel, 0.01);
+      if (tx !== null && Math.abs(tx - viewState.splitPos) < grab) {
+        splitDrag.active = true;
+        return;
+      }
+    }
+    touch.active = true;
+    touch.x = t.clientX;
+    touch.y = t.clientY;
+    touch.id = t.identifier;
+  } else if (e.touches.length === 2) {
+    touch.active = false;
+    splitDrag.active = false;
+    const t1 = e.touches[0], t2 = e.touches[1];
+    twoFinger.active = true;
+    twoFinger.dist  = touchDist(t1, t2);
+    twoFinger.angle = touchAngle(t1, t2);
+    const mid = touchMidpoint(t1, t2);
+    twoFinger.cx = mid.x; twoFinger.cy = mid.y;
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  if (e.touches.length === 2 && twoFinger.active) {
+    const t1 = e.touches[0], t2 = e.touches[1];
+    // Pinch → zoom
+    const newDist = touchDist(t1, t2);
+    const mid = touchMidpoint(t1, t2);
+    if (twoFinger.dist > 0) {
+      const factor = twoFinger.dist / newDist;
+      applyZoom(factor, mid.x, mid.y);
+    }
+    twoFinger.dist = newDist;
+    // Twist → rotZ
+    const newAngle = touchAngle(t1, t2);
+    const dAngle = newAngle - twoFinger.angle;
+    // Wrap delta to [-π, π] to avoid jumps
+    const dWrapped = dAngle - Math.round(dAngle / Math.PI) * Math.PI * 2;
+    viewState.angZ += dWrapped / DEG2RAD;
+    twoFinger.angle = newAngle;
+    viewState.icaActive = false;
+    icaBtn.style.background = '#444';
+    stopRandomRotation();
+    syncSliders();
+    return;
+  }
+  if (e.touches.length === 1) {
+    if (splitDrag.active) {
+      const tx = mouseToTexX(e.touches[0].clientX);
+      if (tx !== null) viewState.splitPos = Math.max(0.0, Math.min(1.0, tx));
+      return;
+    }
+    if (!touch.active) return;
+    const t = e.touches[0];
+    const dx = t.clientX - touch.x;
+    const dy = t.clientY - touch.y;
+    touch.x = t.clientX;
+    touch.y = t.clientY;
+    if (dx === 0 && dy === 0) return;
+    // 1-finger: horizontal → rotY, vertical → rotX
+    viewState.angY += dx * SENS_MOUSE;
+    viewState.angX += dy * SENS_MOUSE;
+    viewState.icaActive = false;
+    icaBtn.style.background = '#444';
+    stopRandomRotation();
+    syncSliders();
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchend', (e) => {
+  e.preventDefault();
+  if (e.touches.length < 2) twoFinger.active = false;
+  if (e.touches.length === 0) {
+    touch.active = false;
+    splitDrag.active = false;
+    // Double-tap detection
+    const now = Date.now();
+    if (now - lastTapTime < 350) {
+      handleDoubleTap(canvas);
+    }
+    lastTapTime = now;
+  }
+}, { passive: false });
+
+// Touch support pour le canvas ROI
+roiCanvas.addEventListener('touchstart', (e) => {
+  if (!roiMode) return;
+  e.preventDefault();
+  if (e.touches.length === 1) {
+    const t = e.touches[0];
+    const rect = roiCanvas.getBoundingClientRect();
+    const ox = t.clientX - rect.left;
+    const oy = t.clientY - rect.top;
+    roiPainting = true;
+    roiLastPos = { x: ox, y: oy };
+    paintRoiAt(ox, oy);
+  }
+}, { passive: false });
+
+roiCanvas.addEventListener('touchmove', (e) => {
+  if (!roiMode || !roiPainting || !roiLastPos) return;
+  e.preventDefault();
+  const t = e.touches[0];
+  const rect = roiCanvas.getBoundingClientRect();
+  const ox = t.clientX - rect.left;
+  const oy = t.clientY - rect.top;
+  paintRoiLine(roiLastPos.x, roiLastPos.y, ox, oy);
+  roiLastPos = { x: ox, y: oy };
+}, { passive: false });
+
+roiCanvas.addEventListener('touchend', (e) => {
+  if (!roiMode) return;
+  e.preventDefault();
+  roiPainting = false; roiLastPos = null;
+  // Double-tap sur roiCanvas → applique le ROI
+  const now = Date.now();
+  if (now - lastTapTime < 350) { handleDoubleTap(roiCanvas); }
+  lastTapTime = now;
+}, { passive: false });
+
+canvas.addEventListener('mousedown', (e) => {
+  if (viewState.splitActive && e.button === 0) {
+    const tx = mouseToTexX(e.clientX);
+    const grab = 0.02 / Math.max(viewState.zoomLevel, 0.01);
+    if (tx !== null && Math.abs(tx - viewState.splitPos) < grab) {
+      splitDrag.active = true;
+      e.preventDefault();
+      return;
+    }
+  }
+  drag.active = true;
+  drag.x = e.clientX;
+  drag.y = e.clientY;
+  drag.button = e.button;
+  drag.ctrl = e.ctrlKey;
+  e.preventDefault();
+});
+
+window.addEventListener('mouseup', () => {
+  drag.active = false;
+  splitDrag.active = false;
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (splitDrag.active) {
+    const tx = mouseToTexX(e.clientX);
+    if (tx !== null) {
+      viewState.splitPos = Math.max(0.0, Math.min(1.0, tx));
+    }
+    return;
+  }
+  if (!drag.active) return;
+  const dx = e.clientX - drag.x;
+  const dy = e.clientY - drag.y;
+  drag.x = e.clientX;
+  drag.y = e.clientY;
+  if (dx === 0 && dy === 0) return;
+
+  const dth = dx * SENS_MOUSE;
+  if (drag.button === 0 && drag.ctrl) {
+    viewState.angX += dth;
+  } else if (drag.button === 2) {
+    viewState.angY += dth;
+  } else if (drag.button === 0) {
+    viewState.angZ += dth;
+  }
+  viewState.icaActive = false;
+  icaBtn.style.background = '#444';
+  stopRandomRotation();
+  syncSliders();
+});
+
+canvas.addEventListener('mouseleave', () => {
+  drag.active = false;
+  splitDrag.active = false;
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  if (!viewState.splitActive || splitDrag.active || drag.active) return;
+  const tx = mouseToTexX(e.clientX);
+  const grab = 0.02 / Math.max(viewState.zoomLevel, 0.01);
+  const near = tx !== null && Math.abs(tx - viewState.splitPos) < grab;
+  canvas.style.cursor = near ? 'col-resize' : 'default';
+});
+
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  if (e.ctrlKey) {
+    const factor = e.deltaY < 0 ? 0.9 : 1.1;
+    applyZoom(factor, e.clientX, e.clientY);
+  } else {
+    const dth = Math.sign(e.deltaY) * SENS_WHEEL;
+    viewState.angX += dth;
+    viewState.icaActive = false;
+    icaBtn.style.background = '#444';
+    stopRandomRotation();
+    syncSliders();
+  }
+}, { passive: false });
+
+// ---------- Image loading and ZCA computation ----------
+function sampleImageLinear(img, maxSamples = 100000) {
+  const canvas2 = document.createElement('canvas');
+  const w = img.width, h = img.height;
+  // Downscale for sampling if the image is very large
+  let scale = 1;
+  const maxDim = 2048;
+  if (Math.max(w, h) > maxDim) scale = maxDim / Math.max(w, h);
+  canvas2.width = Math.floor(w * scale);
+  canvas2.height = Math.floor(h * scale);
+  const ctx = canvas2.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0, canvas2.width, canvas2.height);
+  const data = ctx.getImageData(0, 0, canvas2.width, canvas2.height).data;
+  const n = canvas2.width * canvas2.height;
+  const step = Math.max(1, Math.floor(n / maxSamples));
+  const count = Math.floor(n / step);
+  const out = new Float32Array(count * 3);
+  let j = 0;
+  for (let i = 0; i < n; i += step) {
+    const r = data[i * 4] / 255;
+    const g = data[i * 4 + 1] / 255;
+    const b = data[i * 4 + 2] / 255;
+    out[j++] = srgbToLinear(r);
+    out[j++] = srgbToLinear(g);
+    out[j++] = srgbToLinear(b);
+  }
+  return out;
+}
+
+function resetUI() {
+  viewState.angX = 0; viewState.angY = 0; viewState.angZ = 0;
+  viewState.zoomLevel = 1.0; viewState.zoomCenter = [0, 0];
+  viewState.icaActive = false;
+  viewState.splitActive = false;
+  viewState.splitPos = 0.5;
+  viewState.mode = 0;
+  viewState.randomActive = false;
+  stopRandomRotation();
+  rotX.value = 0; rotY.value = 0; rotZ.value = 0;
+  push.value = 1.0; varRestore.value = 1.0;
+  icaBtn.style.background = '#444';
+  splitBtn.style.background = '#444';
+  setMode(0);
+  syncSliders();
+  presets = [];
+  updatePresetButtons();
+}
+
+function loadImage(file) {
+  if (roiMode) cancelRoiMode();
+  roiBtn.classList.remove('active');
+  resetUI();
+  currentFileName = file.name.replace(/\.[^/.]+$/, '');
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    URL.revokeObjectURL(url);
+    const origW = img.width, origH = img.height;
+    const maxDim = Math.max(origW, origH);
+    const doScale = maxDim > WORK_MAX;
+    const finalize = (work) => {
+      baseImage = work;  // base reference for ROI revert
+      currentImage = work;
+      imageAspect = work.width / work.height;
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, work);
+      const label = doScale
+        ? `${file.name} (${origW}×${origH} → ${work.width}×${work.height})`
+        : `${file.name} (${origW}×${origH})`;
+      statusEl.textContent = `${work.width}×${work.height} — computing ZCA…`;
+      loadingEl.style.display = 'grid';
+      setTimeout(() => {
+        const samples = sampleImageLinear(work);
+        currentLinearSamples = samples;
+        zcaState = zcaFromPixels(samples);
+        baseZcaState = zcaState;
+        loadingEl.style.display = 'none';
+        statusEl.textContent = `${work.width}×${work.height} — ZCA OK`;
+        document.getElementById('fileNameLabel').textContent = label;
+        if (presets.length < 5) savePreset();
+      }, 50);
+    };
+    if (!doScale) { finalize(img); return; }
+    const scale = WORK_MAX / maxDim;
+    const c = document.createElement('canvas');
+    c.width = Math.floor(origW * scale); c.height = Math.floor(origH * scale);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    const work = new Image();
+    work.onload = () => finalize(work);
+    work.src = c.toDataURL('image/png');
+  };
+  img.src = url;
+}
+
+document.getElementById('filePickerBtn').addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  if (/\.tiff?$/i.test(f.name) || f.type === 'image/tiff') {
+    alert('TIFF not supported — please convert to JPEG or PNG first.');
+    fileInput.value = '';
+    return;
+  }
+  document.getElementById('fileNameLabel').textContent = f.name;
+  loadImage(f);
+});
+
+function applyICA() {
+  if (!currentLinearSamples) {
+    statusEl.textContent = "Load an image first";
+    return;
+  }
+  loadingEl.style.display = 'grid';
+  loadingEl.textContent = 'Computing ICA…';
+  setTimeout(() => {
+    try {
+      const n = currentLinearSamples.length / 3;
+      const mu = zcaState.mu;
+      const W = zcaState.W;
+      // Z = (X - mu) @ W.T
+      const Z = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) {
+        const r = currentLinearSamples[i * 3] - mu[0];
+        const g = currentLinearSamples[i * 3 + 1] - mu[1];
+        const b = currentLinearSamples[i * 3 + 2] - mu[2];
+        Z[i * 3]     = r * W[0] + g * W[3] + b * W[6];
+        Z[i * 3 + 1] = r * W[1] + g * W[4] + b * W[7];
+        Z[i * 3 + 2] = r * W[2] + g * W[5] + b * W[8];
+      }
+      const R = fasticaRotation(Z);
+      const [ax, ay, az] = R_to_euler_zyx(R);
+      viewState.angX = wrap180(ax / DEG2RAD);
+      viewState.angY = wrap180(ay / DEG2RAD);
+      viewState.angZ = wrap180(az / DEG2RAD);
+      viewState.icaActive = true;
+      icaBtn.style.background = '#2a6';
+      syncSliders();
+      statusEl.textContent = 'ICA applied';
+    } catch (e) {
+      console.error(e);
+      statusEl.textContent = "ICA error";
+    } finally {
+      loadingEl.style.display = 'none';
+      loadingEl.textContent = 'Computing ZCA…';
+    }
+  }, 50);
+}
+
+async function exportView() {
+  if (!currentImage) { statusEl.textContent = "Load an image first"; return; }
+  loadingEl.style.display = 'grid';
+  loadingEl.textContent = 'Export…';
+  await new Promise(r => setTimeout(r, 30));
+  try {
+      const w = currentImage.width, h = currentImage.height;
+
+      // Read pixels from currentImage
+      const tmpC = document.createElement('canvas');
+      tmpC.width = w; tmpC.height = h;
+      tmpC.getContext('2d', { willReadFrequently: true }).drawImage(currentImage, 0, 0);
+      const imgData = tmpC.getContext('2d').getImageData(0, 0, w, h).data;
+
+      // Build matrices (same as applyRoi)
+      const mu = zcaState.mu, W = zcaState.W, Wi = zcaState.Winv;
+      const Rrow = rotationMatrix(
+        viewState.angX * DEG2RAD, viewState.angY * DEG2RAD, viewState.angZ * DEG2RAD);
+      const R = mat3transpose(Rrow);
+      const pf = parseFloat(push.value);
+      const vr = parseFloat(varRestore.value);
+      const effWi = new Float32Array(9);
+      for (let k = 0; k < 9; k++) {
+        const id = (k === 0 || k === 4 || k === 8) ? 1 : 0;
+        effWi[k] = id + vr * (Wi[k] - id);
+      }
+      const M1 = new Float32Array(9);
+      for (let r = 0; r < 3; r++)
+        for (let c = 0; c < 3; c++) {
+          let v = 0;
+          for (let k = 0; k < 3; k++) v += R[r*3+k] * W[k*3+c];
+          M1[r*3+c] = v * pf;
+        }
+
+      // Apply pixel pipeline with LUT
+      const n = w * h;
+      const out = new Uint8ClampedArray(n * 4);
+      for (let i = 0; i < n; i++) {
+        const p = i * 4;
+        const lr = _srgbToLinLUT[imgData[p]]   - mu[0];
+        const lg = _srgbToLinLUT[imgData[p+1]] - mu[1];
+        const lb = _srgbToLinLUT[imgData[p+2]] - mu[2];
+        const z2r = M1[0]*lr + M1[1]*lg + M1[2]*lb;
+        const z2g = M1[3]*lr + M1[4]*lg + M1[5]*lb;
+        const z2b = M1[6]*lr + M1[7]*lg + M1[8]*lb;
+        const xr = mu[0] + effWi[0]*z2r + effWi[1]*z2g + effWi[2]*z2b;
+        const xg = mu[1] + effWi[3]*z2r + effWi[4]*z2g + effWi[5]*z2b;
+        const xb = mu[2] + effWi[6]*z2r + effWi[7]*z2g + effWi[8]*z2b;
+        out[p]   = Math.round(_linToSrgbLUT[Math.min(1023,Math.max(0,Math.round(xr*1023)))] * 255);
+        out[p+1] = Math.round(_linToSrgbLUT[Math.min(1023,Math.max(0,Math.round(xg*1023)))] * 255);
+        out[p+2] = Math.round(_linToSrgbLUT[Math.min(1023,Math.max(0,Math.round(xb*1023)))] * 255);
+        out[p+3] = 255;
+      }
+
+      const outCanvas = document.createElement('canvas');
+      outCanvas.width = w; outCanvas.height = h;
+      outCanvas.getContext('2d').putImageData(new ImageData(out, w, h), 0, 0);
+
+      // Download
+      const now = new Date();
+      const pad = n => n.toString().padStart(2, '0');
+      const ts = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+      const fileName = `Export_${currentFileName}_${ts}.png`;
+
+      outCanvas.toBlob(blob => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(a.href);
+        loadingEl.style.display = 'none';
+        loadingEl.textContent = 'Computing ZCA…';
+        statusEl.textContent = `Export: ${fileName}`;
+      }, 'image/png');
+  } catch (e) {
+    console.error(e);
+    statusEl.textContent = "Export error";
+    loadingEl.style.display = 'none';
+    loadingEl.textContent = 'Computing ZCA…';
+  }
+}
+
+function savePreset() {
+  if (presets.length >= 5) return;
+  // Bake currentImage to dataURL for storage
+  const snapCanvas = document.createElement('canvas');
+  snapCanvas.width  = currentImage.width;
+  snapCanvas.height = currentImage.height;
+  snapCanvas.getContext('2d').drawImage(currentImage, 0, 0);
+  const preset = {
+    angX: viewState.angX,
+    angY: viewState.angY,
+    angZ: viewState.angZ,
+    roiActive: roiBtn.classList.contains('active') && !roiMode,
+    push: parseFloat(push.value),
+    varRestore: parseFloat(varRestore.value),
+    mode: viewState.mode,
+    splitActive: viewState.splitActive,
+    splitPos: viewState.splitPos,
+    imageDataURL: snapCanvas.toDataURL('image/png'),
+    zca: {
+      mu:   new Float32Array(zcaState.mu),
+      W:    new Float32Array(zcaState.W),
+      Winv: new Float32Array(zcaState.Winv),
+    },
+  };
+  presets.push(preset);
+  updatePresetButtons();
+  statusEl.textContent = `Preset ${presets.length} saved`;
+}
+
+function restorePreset(idx) {
+  if (idx < 0 || idx >= presets.length) return;
+  const p = presets[idx];
+  if (p.roiActive) roiBtn.classList.add('active');
+  else roiBtn.classList.remove('active');
+  viewState.angX = p.angX;
+  viewState.angY = p.angY;
+  viewState.angZ = p.angZ;
+  push.value = p.push;
+  varRestore.value = p.varRestore;
+  viewState.mode = p.mode;
+  viewState.splitActive = p.splitActive;
+  viewState.splitPos = p.splitPos;
+  viewState.icaActive = false;
+  icaBtn.style.background = '#444';
+  splitBtn.style.background = viewState.splitActive ? '#2a6' : '#444';
+  stopRandomRotation();
+  setMode(p.mode);
+  syncSliders();
+  // Restore ZCA
+  zcaState = { mu: new Float32Array(p.zca.mu), W: new Float32Array(p.zca.W), Winv: new Float32Array(p.zca.Winv) };
+  // Restore image
+  const img = new Image();
+  img.onload = () => {
+    currentImage = img;
+    imageAspect = img.width / img.height;
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+  };
+  img.src = p.imageDataURL;
+  statusEl.textContent = `Preset ${idx + 1} restored`;
+}
+
+function updatePresetButtons() {
+  presetContainer.innerHTML = '';
+  presets.forEach((p, idx) => {
+    const btn = document.createElement('button');
+    btn.className = 'preset-btn';
+    btn.textContent = idx + 1;
+    btn.title = `Preset ${idx + 1} — push=${p.push.toFixed(2)} var=${p.varRestore.toFixed(2)}`;
+    btn.addEventListener('click', () => restorePreset(idx));
+    presetContainer.appendChild(btn);
+  });
+}
+
+function clearPresets() {
+  if (presets.length <= 1) return;
+  presets = presets.slice(0, 1);
+  updatePresetButtons();
+  statusEl.textContent = 'Presets cleared (except 1)';
+}
+
+function updateLabels() {
+  valX.textContent = Math.round(viewState.angX) + '°';
+  valY.textContent = Math.round(viewState.angY) + '°';
+  valZ.textContent = Math.round(viewState.angZ) + '°';
+  valPush.textContent = parseFloat(push.value).toFixed(2);
+  valVar.textContent = parseFloat(varRestore.value).toFixed(2);
+}
+
+function deactivateICA() {
+  viewState.icaActive = false;
+  icaBtn.style.background = '#444';
+}
+
+rotX.addEventListener('input', () => { viewState.angX = parseFloat(rotX.value); deactivateICA(); stopRandomRotation(); updateLabels(); });
+rotY.addEventListener('input', () => { viewState.angY = parseFloat(rotY.value); deactivateICA(); stopRandomRotation(); updateLabels(); });
+rotZ.addEventListener('input', () => { viewState.angZ = parseFloat(rotZ.value); deactivateICA(); stopRandomRotation(); updateLabels(); });
+push.addEventListener('input', updateLabels);
+varRestore.addEventListener('input', updateLabels);
+
+function setMode(mode) {
+  viewState.mode = mode;
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.dataset.mode) === mode);
+  });
+}
+
+resetBtn.addEventListener('click', () => {
+  viewState.angX = 0; viewState.angY = 0; viewState.angZ = 0;
+  viewState.zoomLevel = 1.0; viewState.zoomCenter = [0, 0];
+  viewState.icaActive = false;
+  viewState.splitActive = false;
+  viewState.splitPos = 0.5;
+  viewState.mode = 0;
+  rotX.value = 0; rotY.value = 0; rotZ.value = 0; push.value = 1.0; varRestore.value = 1.0;
+  icaBtn.style.background = '#444';
+  splitBtn.style.background = '#444';
+  setMode(0);
+  stopRandomRotation();
+  updateLabels();
+});
+
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => setMode(parseInt(btn.dataset.mode)));
+});
+
+icaBtn.addEventListener('click', applyICA);
+
+function applyRandomRotation() {
+  const R = randomRotation();
+  const [ax, ay, az] = R_to_euler_zyx(R);
+  viewState.angX = wrap180(ax / DEG2RAD);
+  viewState.angY = wrap180(ay / DEG2RAD);
+  viewState.angZ = wrap180(az / DEG2RAD);
+  viewState.icaActive = false;
+  icaBtn.style.background = '#444';
+  syncSliders();
+}
+
+function startRandomRotation() {
+  viewState.randomActive = true;
+  randomBtn.classList.add('active');
+  randomBtnProxy.classList.add('active');
+  applyRandomRotation();
+  randomTimer = setInterval(applyRandomRotation, 3000);
+}
+
+function stopRandomRotation() {
+  if (!viewState.randomActive) return;
+  viewState.randomActive = false;
+  randomBtn.classList.remove('active');
+  randomBtnProxy.classList.remove('active');
+  if (randomTimer) {
+    clearInterval(randomTimer);
+    randomTimer = null;
+  }
+}
+
+randomBtn.addEventListener('click', () => {
+  if (viewState.randomActive) stopRandomRotation();
+  else startRandomRotation();
+});
+randomBtnProxy.addEventListener('click', () => {
+  if (viewState.randomActive) stopRandomRotation();
+  else startRandomRotation();
+});
+
+savePresetBtn.addEventListener('click', savePreset);
+clearPresetsBtn.addEventListener('click', clearPresets);
+
+polBtn.addEventListener('click', () => {
+  viewState.angX = wrap180(-viewState.angX);
+  viewState.angY = wrap180(-viewState.angY);
+  viewState.angZ = wrap180(-viewState.angZ);
+  viewState.icaActive = false;
+  icaBtn.style.background = '#444';
+  stopRandomRotation();
+  syncSliders();
+});
+
+function visibleImageCenterTexX() {
+  // Aspect correction (same as setUniforms)
+  const container = canvas.parentElement;
+  const cAspect = container.clientWidth / container.clientHeight;
+  let ax = 1;
+  if (cAspect > imageAspect) ax = imageAspect / cAspect;
+  // Shader: screen_x = (a_pos * scale + offX) * ax ; image spans a_pos in [-1,1]
+  const scale = 1.0 / viewState.zoomLevel;
+  const offX = viewState.zoomCenter[0] * (1.0 - scale);
+  // a_pos at the left/right screen edges (screen NDC -1 / +1)
+  const aL = (-1 / ax - offX) / scale;
+  const aR = ( 1 / ax - offX) / scale;
+  // Clamp to the image extent (a_pos in [-1, 1])
+  const cL = Math.max(-1, aL);
+  const cR = Math.min(1, aR);
+  const centerApos = (cL + cR) / 2;
+  return Math.max(0.0, Math.min(1.0, (centerApos + 1.0) * 0.5));
+}
+
+splitBtn.addEventListener('click', () => {
+  viewState.splitActive = !viewState.splitActive;
+  if (viewState.splitActive) viewState.splitPos = visibleImageCenterTexX();
+  splitBtn.style.background = viewState.splitActive ? '#2a6' : '#444';
+});
+
+exportBtn.addEventListener('click', exportView);
+
+// ---- Proxies topbar-row2 (mobile) ----
+const roiBtn2    = document.getElementById('roiBtn2');
+const icaBtn2    = document.getElementById('icaBtn2');
+const resetBtn2  = document.getElementById('resetBtn2');
+const polBtn2    = document.getElementById('polBtn2');
+const splitBtn2  = document.getElementById('splitBtn2');
+const exportBtn2 = document.getElementById('exportBtn2');
+
+roiBtn2.addEventListener('click', () => roiBtn.click());
+icaBtn2.addEventListener('click', applyICA);
+resetBtn2.addEventListener('click', () => resetBtn.click());
+polBtn2.addEventListener('click', () => polBtn.click());
+splitBtn2.addEventListener('click', () => {
+  splitBtn.click();
+  splitBtn2.style.background = viewState.splitActive ? '#2a6' : '#444';
+});
+exportBtn2.addEventListener('click', exportView);
+
+// Mirror roiBtn active class on roiBtn2
+const roiBtnObserver = new MutationObserver(() => {
+  roiBtn2.classList.toggle('active', roiBtn.classList.contains('active'));
+  roiBtn2.style.background = roiBtn.classList.contains('active') ? '#c60' : '';
+});
+roiBtnObserver.observe(roiBtn, { attributes: true, attributeFilter: ['class'] });
+
+// Mirror splitBtn state on splitBtn2
+const splitBtnObserver = new MutationObserver(() => {
+  splitBtn2.style.background = splitBtn.style.background;
+});
+splitBtnObserver.observe(splitBtn, { attributes: true, attributeFilter: ['style'] });
+
+// Prevent right-click menu on canvas for rotation drag
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+canvas.tabIndex = 0;
+
+// ---------- Raccourcis clavier (lettres logiques) ----------
+const KEY_STEP = 0.5; // degrés par pression
+window.addEventListener('keydown', (e) => {
+  if (e.target.matches('input, textarea, [contenteditable]')) return;
+  const key = e.key.toLowerCase();
+  let changed = false;
+  if ((key === 'r') && e.ctrlKey && e.shiftKey) {
+    randomBtn.click();
+    e.preventDefault();
+  } else if (key === 'r') {
+    resetBtn.click();
+    e.preventDefault();
+  } else if (key === 'i') {
+    icaBtn.click();
+    e.preventDefault();
+  } else if (key === 't') {
+    splitBtn.click();
+    e.preventDefault();
+  } else if (key === 'p') {
+    savePresetBtn.click();
+    e.preventDefault();
+  } else if (key === 'o') {
+    roiBtn.click();
+    e.preventDefault();
+  } else if (e.key === 'ArrowUp') {
+    push.value = Math.min(parseFloat(push.max), parseFloat(push.value) + 0.05);
+    updateLabels();
+    e.preventDefault();
+  } else if (e.key === 'ArrowDown') {
+    push.value = Math.max(parseFloat(push.min), parseFloat(push.value) - 0.05);
+    updateLabels();
+    e.preventDefault();
+  } else if (key === 'q') {
+    viewState.angX -= KEY_STEP; changed = true;
+  } else if (key === 'd') {
+    viewState.angX += KEY_STEP; changed = true;
+  } else if (key === 'z') {
+    viewState.angY -= KEY_STEP; changed = true;
+  } else if (key === 's') {
+    viewState.angY += KEY_STEP; changed = true;
+  } else if (key === 'a') {
+    viewState.angZ -= KEY_STEP; changed = true;
+  } else if (key === 'e') {
+    viewState.angZ += KEY_STEP; changed = true;
+  }
+  if (changed) {
+    viewState.icaActive = false;
+    icaBtn.style.background = '#444';
+    stopRandomRotation();
+    syncSliders();
+    e.preventDefault();
+  }
+});
+
+canvas.addEventListener('mousedown', () => canvas.focus());
+
+// ---------- ROI mode ----------
+const ROI_BRUSH_RADIUS = 15; // 30px diameter
+let roiMode = false;
+let roiPainting = false;
+let roiLastPos = null;
+
+// roiMask: Float32Array same resolution as currentImage, values 0/1
+let roiMask = null;
+
+function resizeRoiCanvas() {
+  const container = roiCanvas.parentElement;
+  roiCanvas.width  = container.clientWidth  || roiCanvas.offsetWidth;
+  roiCanvas.height = container.clientHeight || roiCanvas.offsetHeight;
+  redrawRoiOverlay();
+}
+
+function startRoiMode() {
+  if (!baseImage) { statusEl.textContent = 'Load an image first'; return; }
+  roiMode = true;
+  roiMask = new Float32Array(baseImage.width * baseImage.height);
+  roiCanvas.classList.add('active');
+  roiBtn.classList.add('active');
+  resizeRoiCanvas();
+  statusEl.textContent = 'ROI: paint, then double-click to apply. Esc to cancel.';
+}
+
+function cancelRoiMode() {
+  roiMode = false;
+  roiMask = null;
+  roiPainting = false;
+  roiLastPos = null;
+  roiCanvas.classList.remove('active');
+  roiBtn.classList.remove('active');
+  roiCtx.clearRect(0, 0, roiCanvas.width, roiCanvas.height);
+  statusEl.textContent = 'ROI cancelled';
+}
+
+function redrawRoiOverlay() {
+  roiCtx.clearRect(0, 0, roiCanvas.width, roiCanvas.height);
+  if (!roiMask || !baseImage) return;
+  const iw = baseImage.width, ih = baseImage.height;
+  const cw = roiCanvas.width, ch = roiCanvas.height;
+
+  // Base letterbox rect
+  const aspect = iw / ih;
+  let dw, dh, ox, oy;
+  if (cw / ch > aspect) { dh = ch; dw = ch * aspect; } else { dw = cw; dh = cw / aspect; }
+  ox = (cw - dw) / 2; oy = (ch - dh) / 2;
+
+  // Apply zoom transform matching the vertex shader:
+  //   gl_Position = a_position * (1/zoomLevel) + zoomCenter*(1 - 1/zoomLevel)
+  // In screen space: displayed image is dw/zoomLevel wide, shifted by offset.
+  const zl = viewState.zoomLevel;
+  const s  = 1.0 / zl;                                      // shader scale
+  const offX = viewState.zoomCenter[0] * (1.0 - s);        // shader NDC offset
+  const offY = viewState.zoomCenter[1] * (1.0 - s);
+  // Convert NDC offset → screen offset (NDC -1..1 maps to 0..dw/dh)
+  const zdw = dw * s;   // displayed width of image in screen pixels
+  const zdh = dh * s;
+  const zox = ox + (offX + 1.0 - s) * dw * 0.5;
+  const zoy = oy + (1.0 - s - offY) * dh * 0.5;
+
+  // Draw mask as semi-transparent orange overlay at zoomed position
+  const tmp = document.createElement('canvas');
+  tmp.width = iw; tmp.height = ih;
+  const tc = tmp.getContext('2d');
+  const id = tc.createImageData(iw, ih);
+  for (let i = 0; i < iw * ih; i++) {
+    if (roiMask[i] > 0.5) {
+      id.data[i*4]   = 255;
+      id.data[i*4+1] = 140;
+      id.data[i*4+2] = 0;
+      id.data[i*4+3] = 140;
+    }
+  }
+  tc.putImageData(id, 0, 0);
+  roiCtx.drawImage(tmp, zox, zoy, zdw, zdh);
+}
+
+function paintRoiAt(cx, cy) {
+  if (!roiMask || !baseImage) return;
+  const iw = baseImage.width, ih = baseImage.height;
+  const cw = roiCanvas.width, ch = roiCanvas.height;
+  const aspect = iw / ih;
+  let dw, dh, ox, oy;
+  if (cw / ch > aspect) { dh = ch; dw = ch * aspect; } else { dw = cw; dh = cw / aspect; }
+  ox = (cw - dw) / 2; oy = (ch - dh) / 2;
+
+  // Convert screen pos → NDC via the zoomed image rect
+  // Shader: pos_ndc = a_pos * s + off,  s = 1/zoomLevel
+  const s    = 1.0 / viewState.zoomLevel;
+  const offX = viewState.zoomCenter[0] * (1.0 - s);
+  const offY = viewState.zoomCenter[1] * (1.0 - s);
+  // zoomed rect in screen space (same as redrawRoiOverlay)
+  const zdw = dw * s, zdh = dh * s;
+  const zox = ox + (offX + 1.0 - s) * dw * 0.5;
+  const zoy = oy + (1.0 - s - offY) * dh * 0.5;
+
+  // Screen → zoomed NDC → un-zoom → image UV
+  const ax = ((cx - zox) / zdw) * 2.0 - 1.0;
+  const ay = (1.0 - (cy - zoy) / zdh) * 2.0 - 1.0;
+  const u = (ax + 1.0) * 0.5;
+  const v = 1.0 - (ay + 1.0) * 0.5;
+  const px = u * iw;
+  const py = v * ih;
+
+  // Brush radius: 30px screen → scale to image pixels via zoomed display size
+  const r = ROI_BRUSH_RADIUS * (iw / zdw);
+
+  const x0 = Math.max(0, Math.floor(px - r));
+  const x1 = Math.min(iw - 1, Math.ceil(px + r));
+  const y0 = Math.max(0, Math.floor(py - r));
+  const y1 = Math.min(ih - 1, Math.ceil(py + r));
+
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      if ((x - px) ** 2 + (y - py) ** 2 <= r * r) {
+        roiMask[y * iw + x] = 1;
+      }
+    }
+  }
+  redrawRoiOverlay();
+}
+
+function paintRoiLine(ax, ay, bx, by) {
+  const dist = Math.hypot(bx - ax, by - ay);
+  const steps = Math.max(1, Math.ceil(dist / (ROI_BRUSH_RADIUS * 0.5)));
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    paintRoiAt(ax + t * (bx - ax), ay + t * (by - ay));
+  }
+}
+
+// LUT for fast sRGB→linear and linear→sRGB (256 entries)
+const _srgbToLinLUT = new Float32Array(256);
+const _linToSrgbLUT = new Float32Array(1024);
+for (let i = 0; i < 256; i++) _srgbToLinLUT[i] = srgbToLinear(i / 255);
+for (let i = 0; i < 1024; i++) _linToSrgbLUT[i] = linearToSrgb(i / 1023);
+
+async function applyRoi() {
+  if (!roiMask || !baseImage) return;
+  const painted = roiMask.reduce((s, v) => s + (v > 0.5 ? 1 : 0), 0);
+  if (painted < 100) { statusEl.textContent = 'ROI too small (min 100 pixels)'; return; }
+
+  loadingEl.style.display = 'grid';
+  loadingEl.textContent = 'Applying ROI…';
+  await new Promise(r => setTimeout(r, 30));
+
+  try {
+    const iw = baseImage.width, ih = baseImage.height;
+
+    // 1. Read all pixels from baseImage at full resolution
+    const tmpC = document.createElement('canvas');
+    tmpC.width = iw; tmpC.height = ih;
+    const tmpCtx = tmpC.getContext('2d', { willReadFrequently: true });
+    tmpCtx.drawImage(baseImage, 0, 0);
+    const imgData = tmpCtx.getImageData(0, 0, iw, ih).data;
+
+    // 2. Collect painted pixels (downsampled for ZCA only)
+    const maxDim = 1024;
+    let scale = 1;
+    if (Math.max(iw, ih) > maxDim) scale = maxDim / Math.max(iw, ih);
+    const sw = Math.floor(iw * scale), sh = Math.floor(ih * scale);
+    const sC = document.createElement('canvas');
+    sC.width = sw; sC.height = sh;
+    const sCtx = sC.getContext('2d', { willReadFrequently: true });
+    sCtx.drawImage(baseImage, 0, 0, sw, sh);
+    const sData = sCtx.getImageData(0, 0, sw, sh).data;
+
+    const roiLinList = [];
+    for (let sy = 0; sy < sh; sy++) {
+      for (let sx = 0; sx < sw; sx++) {
+        const ix = Math.min(iw - 1, Math.round(sx / scale));
+        const iy = Math.min(ih - 1, Math.round(sy / scale));
+        if (roiMask[iy * iw + ix] > 0.5) {
+          const p = (sy * sw + sx) * 4;
+          roiLinList.push(_srgbToLinLUT[sData[p]], _srgbToLinLUT[sData[p+1]], _srgbToLinLUT[sData[p+2]]);
+        }
+      }
+    }
+    if (roiLinList.length < 9) { statusEl.textContent = 'ROI too small'; return; }
+
+    // 3. ZCA on painted pixels only
+    const localZca = zcaFromPixels(new Float32Array(roiLinList));
+    const mu = localZca.mu, W = localZca.W, Wi = localZca.Winv;
+
+    // 4. Build effective matrices: R (matching shader convention), effWinv
+    const Rrow = rotationMatrix(
+      viewState.angX * DEG2RAD, viewState.angY * DEG2RAD, viewState.angZ * DEG2RAD);
+    // Shader uploads row-major without transpose → GLSL sees R^T, so we apply R^T here too
+    const R = mat3transpose(Rrow);
+    const pf = parseFloat(push.value);
+    const vr = parseFloat(varRestore.value);
+    const effWi = new Float32Array(9);
+    for (let k = 0; k < 9; k++) {
+      const id = (k === 0 || k === 4 || k === 8) ? 1 : 0;
+      effWi[k] = id + vr * (Wi[k] - id);
+    }
+
+    // Pre-multiply W, R*pf, effWi into two 3×3s to minimize per-pixel ops
+    // M1 = R*pf * W  (whitening + rotate + push combined)
+    const M1 = new Float32Array(9);
+    for (let r = 0; r < 3; r++)
+      for (let c = 0; c < 3; c++) {
+        let v = 0;
+        for (let k = 0; k < 3; k++) v += R[r*3+k] * W[k*3+c];
+        M1[r*3+c] = v * pf;
+      }
+    // M2 = effWi  (de-whitening)
+
+    // 5. Apply to all pixels using LUT — fast TypedArray loop
+    const n = iw * ih;
+    const out = new Uint8ClampedArray(n * 4);
+    for (let i = 0; i < n; i++) {
+      const p = i * 4;
+      const lr = _srgbToLinLUT[imgData[p]]   - mu[0];
+      const lg = _srgbToLinLUT[imgData[p+1]] - mu[1];
+      const lb = _srgbToLinLUT[imgData[p+2]] - mu[2];
+      const z2r = M1[0]*lr + M1[1]*lg + M1[2]*lb;
+      const z2g = M1[3]*lr + M1[4]*lg + M1[5]*lb;
+      const z2b = M1[6]*lr + M1[7]*lg + M1[8]*lb;
+      let xr = mu[0] + effWi[0]*z2r + effWi[1]*z2g + effWi[2]*z2b;
+      let xg = mu[1] + effWi[3]*z2r + effWi[4]*z2g + effWi[5]*z2b;
+      let xb = mu[2] + effWi[6]*z2r + effWi[7]*z2g + effWi[8]*z2b;
+      out[p]   = Math.round(_linToSrgbLUT[Math.min(1023, Math.max(0, Math.round(xr * 1023)))] * 255);
+      out[p+1] = Math.round(_linToSrgbLUT[Math.min(1023, Math.max(0, Math.round(xg * 1023)))] * 255);
+      out[p+2] = Math.round(_linToSrgbLUT[Math.min(1023, Math.max(0, Math.round(xb * 1023)))] * 255);
+      out[p+3] = 255;
+    }
+
+    // 6. Bake result into a canvas → new currentImage
+    const outC = document.createElement('canvas');
+    outC.width = iw; outC.height = ih;
+    outC.getContext('2d').putImageData(new ImageData(out, iw, ih), 0, 0);
+
+    await new Promise((resolve, reject) => {
+      const newImg = new Image();
+      newImg.onload = () => {
+        currentImage = newImg;
+        imageAspect = iw / ih;
+        // Upload to GL and set new ZCA (identity rotation from here)
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, newImg);
+        zcaState = localZca;
+        currentLinearSamples = new Float32Array(roiLinList);
+        viewState.angX = viewState.angY = viewState.angZ = 0;
+        viewState.icaActive = false;
+        icaBtn.style.background = '#444';
+        syncSliders();
+        resolve();
+      };
+      newImg.onerror = reject;
+      newImg.src = outC.toDataURL('image/png');
+    });
+
+    // Exit drawing mode but keep button lit as indicator that ROI ZCA is active
+    cancelRoiMode();
+    roiBtn.classList.add('active'); // keep button orange
+    statusEl.textContent = 'ROI ZCA active — double-click ROI button to revert';
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = 'ROI error: ' + err.message;
+  } finally {
+    loadingEl.style.display = 'none';
+    loadingEl.textContent = 'Computing ZCA…';
+  }
+}
+
+roiBtn.addEventListener('click', () => {
+  if (roiMode) cancelRoiMode();
+  else startRoiMode();
+});
+
+roiBtn.addEventListener('dblclick', (e) => {
+  e.stopPropagation();
+  if (!baseZcaState || !baseImage) return;
+  currentImage = baseImage;
+  imageAspect = baseImage.width / baseImage.height;
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, baseImage);
+  zcaState = baseZcaState;
+  currentLinearSamples = null;
+  viewState.angX = viewState.angY = viewState.angZ = 0;
+  viewState.icaActive = false;
+  icaBtn.style.background = '#444';
+  syncSliders();
+  cancelRoiMode(); // also removes 'active' class
+  statusEl.textContent = 'Reverted to original ZCA';
+});
+
+roiCanvas.addEventListener('mousedown', (e) => {
+  if (!roiMode) return;
+  roiPainting = true;
+  roiLastPos = { x: e.offsetX, y: e.offsetY };
+  paintRoiAt(e.offsetX, e.offsetY);
+});
+
+roiCanvas.addEventListener('mousemove', (e) => {
+  if (!roiMode || !roiPainting || !roiLastPos) return;
+  paintRoiLine(roiLastPos.x, roiLastPos.y, e.offsetX, e.offsetY);
+  roiLastPos = { x: e.offsetX, y: e.offsetY };
+});
+
+roiCanvas.addEventListener('mouseup', () => { roiPainting = false; roiLastPos = null; });
+roiCanvas.addEventListener('mouseleave', () => { roiPainting = false; roiLastPos = null; });
+
+roiCanvas.addEventListener('dblclick', () => { if (roiMode) applyRoi(); });
+
+// Forward wheel events to glCanvas so zoom still works in ROI mode
+roiCanvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  canvas.dispatchEvent(new WheelEvent('wheel', {
+    bubbles: true, cancelable: true,
+    clientX: e.clientX, clientY: e.clientY,
+    deltaY: e.deltaY, deltaMode: e.deltaMode
+  }));
+  // Redraw overlay after zoom changes
+  requestAnimationFrame(redrawRoiOverlay);
+}, { passive: false });
+
+window.addEventListener('resize', () => { if (roiMode) resizeRoiCanvas(); });
+
+// Escape cancels ROI mode
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && roiMode) { cancelRoiMode(); e.preventDefault(); }
+}, true);
+
+updateLabels();
+</script>
+</body>
+</html>
